@@ -89,9 +89,8 @@ export function rowToWorkflowLog(row: WorkflowLogRow): WorkflowLog {
 }
 
 /**
- * Full memo text is only needed on the log detail route. Sending every run's full GPT output
- * in /api/app-state can exceed JSON/edge response limits; the handler then falls back to the
- * three demo seed logs (HTTP 200), which looks like 'only my first three runs' after refresh.
+ * Full memo text is only needed on the log detail route. List rows use slim columns and
+ * truncated previews so /api/app-state stays within response limits; overload still fails as 503.
  */
 const APP_STATE_LIST_OUTPUT_MAX_CHARS = 3200;
 const APP_STATE_LIST_INPUTS_MAX_CHARS = 3200;

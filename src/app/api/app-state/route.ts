@@ -9,10 +9,16 @@ import {
 import { SEED_LOGS } from "@/lib/seedLogs";
 import { getSupabaseAdmin } from "@/lib/supabase/adminClient";
 import { formatSupabaseError } from "@/lib/supabase/errors";
-import type { WorkflowLog } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+  Pragma: "no-cache",
+  Expires: "0",
+  "Surrogate-Control": "no-store",
+} as const;
 
 export async function GET() {
   const supabase = getSupabaseAdmin();
@@ -26,10 +32,7 @@ export async function GET() {
       },
       {
         headers: {
-          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-          Pragma: "no-cache",
-          Expires: "0",
-          "Surrogate-Control": "no-store",
+          ...NO_STORE_HEADERS,
           "X-Meridian-Logs-Count": String(SEED_LOGS.length),
         },
       },
@@ -37,49 +40,12 @@ export async function GET() {
   }
 
   try {
-    try {
-      await ensureSeedData(supabase);
-    } catch (seedErr) {
-      console.error(
-        "[Meridian] ensureSeedData:",
-        formatSupabaseError(seedErr),
-        seedErr,
-      );
-    }
-
-    let categories = structuredClone(INITIAL_CATEGORIES);
-    /** Empty until load succeeds — avoids showing SEED_LOGS on load error while persistence is still "supabase". */
-    let logs: WorkflowLog[] = [];
-    let variantLabels: Record<string, string> = {};
-    let partialWarning: string | undefined;
-
-    try {
-      categories = await loadCategoriesFromDb(supabase);
-    } catch (catErr) {
-      const msg = formatSupabaseError(catErr);
-      console.error("[Meridian] app-state loadCategoriesFromDb:", msg, catErr);
-      partialWarning = "Categories could not be loaded from the database; using defaults.";
-    }
-
-    try {
-      logs = await loadLogsListForAppState(supabase);
-    } catch (logErr) {
-      const msg = formatSupabaseError(logErr);
-      console.error("[Meridian] app-state loadLogsListForAppState:", msg, logErr);
-      partialWarning =
-        (partialWarning ? `${partialWarning} ` : "") +
-        "Workflow logs could not be loaded from the database; history may appear empty until this is fixed.";
-    }
-
-    try {
-      variantLabels = await loadVariantLabelsFromDb(supabase);
-    } catch (labelErr) {
-      const msg = formatSupabaseError(labelErr);
-      console.error("[Meridian] app-state loadVariantLabelsFromDb:", msg, labelErr);
-      partialWarning =
-        (partialWarning ? `${partialWarning} ` : "") +
-        "Custom prompt names could not be loaded from the database.";
-    }
+    await ensureSeedData(supabase);
+    const [categories, logs, variantLabels] = await Promise.all([
+      loadCategoriesFromDb(supabase),
+      loadLogsListForAppState(supabase),
+      loadVariantLabelsFromDb(supabase),
+    ]);
 
     return NextResponse.json(
       {
@@ -87,14 +53,10 @@ export async function GET() {
         categories,
         logs,
         variantLabels,
-        ...(partialWarning ? { warning: partialWarning } : {}),
       },
       {
         headers: {
-          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-          Pragma: "no-cache",
-          Expires: "0",
-          "Surrogate-Control": "no-store",
+          ...NO_STORE_HEADERS,
           "X-Meridian-Logs-Count": String(logs.length),
         },
       },
@@ -104,20 +66,14 @@ export async function GET() {
     console.error("[Meridian] app-state:", msg, e);
     return NextResponse.json(
       {
-        persistence: "local" as const,
-        categories: structuredClone(INITIAL_CATEGORIES),
-        logs: structuredClone(SEED_LOGS),
-        variantLabels: {} as Record<string, string>,
-        warning: `Supabase unavailable (${msg}). Using local demo data.`,
+        persistence: "supabase" as const,
+        error: msg,
       },
       {
-        status: 200,
+        status: 503,
         headers: {
-          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-          Pragma: "no-cache",
-          Expires: "0",
-          "Surrogate-Control": "no-store",
-          "X-Meridian-Logs-Count": String(SEED_LOGS.length),
+          ...NO_STORE_HEADERS,
+          "X-Meridian-Logs-Count": "0",
         },
       },
     );

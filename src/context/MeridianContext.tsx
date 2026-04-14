@@ -164,26 +164,27 @@ export function MeridianProvider({ children }: { children: React.ReactNode }) {
   const [typingDone, setTypingDone] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** Latest /api/config flag — hydrate error paths use this so we never show demo logs when the server expects Supabase. */
+  const supabaseConfiguredRef = useRef(false);
 
   const refreshConfig = useCallback(async () => {
     try {
       const r = await fetch("/api/config");
       const d = (await r.json()) as ConfigState;
+      const supa = Boolean(d.supabaseConfigured);
+      supabaseConfiguredRef.current = supa;
       setConfig({
         workflowsReady: Boolean(d.workflowsReady),
-        supabaseConfigured: Boolean(d.supabaseConfigured),
+        supabaseConfigured: supa,
       });
     } catch {
+      supabaseConfiguredRef.current = false;
       setConfig({
         workflowsReady: false,
         supabaseConfigured: false,
       });
     }
   }, []);
-
-  useEffect(() => {
-    void refreshConfig();
-  }, [refreshConfig]);
 
   useLayoutEffect(() => {
     const v = readStoredView();
@@ -209,6 +210,7 @@ export function MeridianProvider({ children }: { children: React.ReactNode }) {
     void (async () => {
       let finishedHydration = false;
       try {
+        await refreshConfig();
         const r = await fetch(appStateUrl(), {
           ...APP_STATE_FETCH_BASE,
           signal: ac.signal,
@@ -218,7 +220,7 @@ export function MeridianProvider({ children }: { children: React.ReactNode }) {
           categories?: Category[];
           logs?: WorkflowLog[];
           variantLabels?: Record<string, string>;
-          warning?: string;
+          error?: string;
         };
         try {
           d = (await r.json()) as typeof d;
@@ -226,11 +228,28 @@ export function MeridianProvider({ children }: { children: React.ReactNode }) {
           throw new Error("app-state: response is not JSON");
         }
         if (!r.ok) {
+          if (d.persistence === "supabase") {
+            if (seq !== hydrateSeq.current) return;
+            setError(
+              typeof d.error === "string" && d.error
+                ? d.error
+                : `Could not load app data (HTTP ${r.status}). Check Vercel logs and Supabase.`,
+            );
+            setCategories(
+              mergeSeedPromptVariables(structuredClone(INITIAL_CATEGORIES)),
+            );
+            setLogs([]);
+            setVariantLabels({});
+            setPersistenceEnabled(true);
+            hydrateSucceeded.current = false;
+            finishedHydration = true;
+            return;
+          }
           console.error("[Meridian] app-state HTTP", r.status, d);
           throw new Error(`app-state: HTTP ${r.status}`);
         }
         if (seq !== hydrateSeq.current) return;
-        if (d.warning) console.warn(d.warning);
+        setError("");
         if (Array.isArray(d.categories)) {
           if (d.persistence === "supabase") {
             setCategories(mergeSeedPromptVariables(d.categories));
@@ -275,14 +294,30 @@ export function MeridianProvider({ children }: { children: React.ReactNode }) {
           void (async () => {
             try {
               const r = await fetch(appStateUrl(), APP_STATE_FETCH_BASE);
-              if (!r.ok) return;
-              const d = (await r.json()) as {
+              let d: {
                 logs?: unknown[];
                 categories?: Category[];
                 persistence?: string;
                 variantLabels?: Record<string, string>;
+                error?: string;
               };
+              try {
+                d = (await r.json()) as typeof d;
+              } catch {
+                return;
+              }
+              if (!r.ok) {
+                if (d.persistence === "supabase") {
+                  const msg =
+                    typeof d.error === "string" && d.error
+                      ? d.error
+                      : `Could not reload app data (HTTP ${r.status}).`;
+                  if (recoverForSeq === hydrateSeq.current) setError(msg);
+                }
+                return;
+              }
               if (recoverForSeq !== hydrateSeq.current) return;
+              setError("");
               if (Array.isArray(d.logs)) {
                 setLogs(d.logs.map((item) => coerceWorkflowLog(item)));
               }
@@ -315,6 +350,21 @@ export function MeridianProvider({ children }: { children: React.ReactNode }) {
           })();
           return;
         }
+        if (supabaseConfiguredRef.current) {
+          setError(
+            e instanceof Error
+              ? e.message
+              : "Could not load app state. Check your network and try refreshing.",
+          );
+          setCategories(
+            mergeSeedPromptVariables(structuredClone(INITIAL_CATEGORIES)),
+          );
+          setLogs([]);
+          setVariantLabels({});
+          setPersistenceEnabled(true);
+          finishedHydration = true;
+          return;
+        }
         setCategories(
           mergeSeedPromptVariables(
             loadLocalCategories() ?? structuredClone(INITIAL_CATEGORIES),
@@ -331,7 +381,7 @@ export function MeridianProvider({ children }: { children: React.ReactNode }) {
       }
     })();
     return () => ac.abort();
-  }, []);
+  }, [refreshConfig]);
 
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
