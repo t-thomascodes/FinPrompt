@@ -1,10 +1,13 @@
-import { FinPrompt } from "@/components/FinPrompt";
-import { FinPromptProvider } from "@/context/FinPromptContext";
+import { DemoGate } from "@/components/DemoGate";
+import { Meridian } from "@/components/Meridian";
+import { MeridianProvider } from "@/context/MeridianContext";
 
 export default function Home() {
   return (
-    <FinPromptProvider>
-      <FinPrompt />
-    </FinPromptProvider>
+    <DemoGate>
+      <MeridianProvider>
+        <Meridian />
+      </MeridianProvider>
+    </DemoGate>
   );
 }

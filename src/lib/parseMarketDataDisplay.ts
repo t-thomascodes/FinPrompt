@@ -1,4 +1,4 @@
-/** Parse FinPrompt market blocks into UI-friendly fields. */
+/** Parse Meridian market blocks into UI-friendly fields. */
 
 import type { MarketDataBundle } from "@/lib/marketDataTypes";
 

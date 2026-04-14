@@ -90,7 +90,7 @@ function sectionToTextParts(
 
 export async function buildPptxBuffer(payload: ExportPayload): Promise<Buffer> {
   const pptx = new pptxgen();
-  pptx.author = "FinPrompt";
+  pptx.author = "Meridian";
   pptx.title = payload.title;
 
   const accent = categoryAccentHex(payload.category).replace("#", "");
@@ -98,7 +98,7 @@ export async function buildPptxBuffer(payload: ExportPayload): Promise<Buffer> {
 
   const titleSlide = pptx.addSlide();
   titleSlide.background = { color: "0A0E17" };
-  titleSlide.addText("FinPrompt", {
+  titleSlide.addText("Meridian", {
     x: 8.2,
     y: 0.35,
     w: 1.8,

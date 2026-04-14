@@ -1,19 +1,20 @@
 "use client";
 
-import { useFinPrompt } from "@/context/FinPromptContext";
+import { useMeridian } from "@/context/MeridianContext";
+import { clearDemoSession } from "@/lib/demoSession";
 
 export function Header() {
-  const { view, setView, logs, setViewingLog } = useFinPrompt();
+  const { view, setView, logs, setViewingLog } = useMeridian();
 
   return (
     <header className="flex shrink-0 flex-col gap-3 border-b-[0.5px] border-fp-border bg-fp-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex h-[30px] w-[30px] items-center justify-center rounded-fp-btn bg-fp-research font-mono text-[15px] font-bold text-white">
-          F
+          M
         </div>
         <div>
           <div className="text-[15px] font-bold text-fp-text-primary">
-            FinPrompt
+            Meridian
           </div>
           <div className="text-[10px] uppercase tracking-[1.5px] text-fp-text-muted">
             AI Workflow Layer for Asset Management
@@ -45,6 +46,16 @@ export function Header() {
             {tab.label}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => {
+            clearDemoSession();
+            window.location.reload();
+          }}
+          className="rounded-fp-btn px-3 py-1.5 font-sans text-[11px] font-medium text-fp-text-muted hover:bg-fp-surface-secondary hover:text-fp-text-secondary"
+        >
+          Exit demo
+        </button>
       </div>
     </header>
   );

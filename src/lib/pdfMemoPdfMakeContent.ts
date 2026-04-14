@@ -32,9 +32,17 @@ function stripBoldMarkers(s: string): string {
   return s.replace(/\*\*(.+?)\*\*/g, "$1");
 }
 
-function tableCell(text: string): TableCell {
-  return { text: mdToRuns(text), style: "body", fontSize: 9, margin: [2, 3, 2, 3] };
+function tableCell(text: string, compact: boolean): TableCell {
+  return {
+    text: mdToRuns(text),
+    style: "body",
+    fontSize: compact ? 7 : 9,
+    margin: compact ? [1, 2, 1, 2] : [2, 3, 2, 3],
+  };
 }
+
+/** Many-column comps tables need landscape + smaller type to avoid clipping. */
+const WIDE_TABLE_COL_THRESHOLD = 6;
 
 function thinSectionRule(): Content {
   return {
@@ -159,19 +167,35 @@ export function sectionsToPdfMakeContent(outputMarkdown: string): Content[] {
         const rows = parseTableRows(s.content);
         if (!rows.length) break;
         const colCount = Math.max(1, ...rows.map((r) => r.length));
+        const wide = colCount >= WIDE_TABLE_COL_THRESHOLD;
         const widths = Array.from({ length: colCount }, () => "*" as const);
-        out.push({
+        const tableStack: Content = {
           table: {
             widths,
             body: rows.map((r) => {
               const cells = [...r];
               while (cells.length < colCount) cells.push("");
-              return cells.map((c) => tableCell(c));
+              return cells.map((c) => tableCell(c, wide));
             }),
           },
           layout: "lightHorizontalLines",
           margin: [0, 6, 0, 10],
-        });
+        };
+        if (wide) {
+          out.push({
+            text: "",
+            pageBreak: "before",
+            pageOrientation: "landscape",
+          });
+        }
+        out.push(tableStack);
+        if (wide) {
+          out.push({
+            text: "",
+            pageBreak: "before",
+            pageOrientation: "portrait",
+          });
+        }
         break;
       }
       case "paragraph":

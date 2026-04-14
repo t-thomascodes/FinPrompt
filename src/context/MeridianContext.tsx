@@ -13,19 +13,31 @@ import {
 import { CATEGORIES as INITIAL_CATEGORIES } from "@/lib/categories";
 import { coerceWorkflowLog } from "@/lib/coerceWorkflowLog";
 import { loadLocalCategories, saveLocalCategories } from "@/lib/localCatalogStorage";
+import {
+  loadLocalVariantLabels,
+  saveLocalVariantLabels,
+} from "@/lib/localVariantLabelStorage";
+import { isForkedPromptId } from "@/lib/promptFork";
+import { makeVariantLabelKey } from "@/lib/variantLabelKey";
 import { SEED_LOGS } from "@/lib/seedLogs";
 import type { Category, PromptTemplate, WorkflowLog } from "@/lib/types";
 import type { MarketDataBundle } from "@/lib/marketDataTypes";
 import { normalizeStarRating } from "@/lib/normalizeRating";
+import { validateTemplatePlaceholdersPreserved } from "@/lib/templateDisplay";
+import {
+  buildFullTemplate,
+  getInstructionBody,
+} from "@/lib/promptInstructionFooter";
+import { mergeSeedPromptVariables } from "@/lib/mergeSeedPromptVariables";
 
 export type AppView = "workflows" | "logs" | "workflowHistory" | "analytics";
 
 type ConfigState = {
-  openaiConfigured: boolean;
+  workflowsReady: boolean;
   supabaseConfigured: boolean;
 };
 
-type FinPromptContextValue = {
+type MeridianContextValue = {
   categories: Category[];
   setCategories: React.Dispatch<React.SetStateAction<Category[]>>;
   view: AppView;
@@ -65,6 +77,16 @@ type FinPromptContextValue = {
   handleSaveEdit: () => void;
   handleForkPrompt: () => void;
   rateLog: (logId: string, rating: number) => void | Promise<void>;
+  deleteLog: (logId: string) => void | Promise<void>;
+  /** Custom names for template versions (By workflow → prompt groups), keyed by `makeVariantLabelKey`. */
+  variantLabels: Record<string, string>;
+  setVariantLabel: (promptId: string, variantKey: string, label: string) => boolean;
+  /** Rename a forked workflow’s display title (sidebar Custom section). */
+  renameForkedPromptTitle: (
+    categoryId: string,
+    promptId: string,
+    title: string,
+  ) => boolean;
   /** Merge server-fetched fields (e.g. rating) into the in-memory log list. */
   mergeServerLog: (log: WorkflowLog) => void;
   activeCategoryObj: Category | undefined;
@@ -72,9 +94,25 @@ type FinPromptContextValue = {
   persistenceEnabled: boolean;
 };
 
-const FinPromptContext = createContext<FinPromptContextValue | null>(null);
+const MeridianContext = createContext<MeridianContextValue | null>(null);
 
-const VIEW_STORAGE_KEY = "finprompt:active-view";
+const VIEW_STORAGE_KEY = "meridian:active-view";
+
+/** Unique URL so browsers/proxies cannot serve a stale cached /api/app-state body after reload. */
+function appStateUrl(): string {
+  return `/api/app-state?_=${Date.now()}&r=${Math.random().toString(36).slice(2, 10)}`;
+}
+
+const APP_STATE_FETCH_BASE: Pick<RequestInit, "cache" | "headers"> = {
+  cache: "no-store",
+  headers: {
+    "Cache-Control": "no-cache",
+    Pragma: "no-cache",
+  },
+};
+
+const PERSISTED_LOG_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function readStoredView(): AppView | null {
   try {
@@ -92,7 +130,7 @@ function readStoredView(): AppView | null {
   return null;
 }
 
-export function FinPromptProvider({ children }: { children: React.ReactNode }) {
+export function MeridianProvider({ children }: { children: React.ReactNode }) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [view, setViewState] = useState<AppView>("workflows");
   const [activeCategory, setActiveCategory] = useState("research");
@@ -110,10 +148,11 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
     null,
   );
   const [logs, setLogs] = useState<WorkflowLog[]>([]);
+  const [variantLabels, setVariantLabels] = useState<Record<string, string>>({});
   const [dataHydrated, setDataHydrated] = useState(false);
   const [persistenceEnabled, setPersistenceEnabled] = useState(false);
   const [config, setConfig] = useState<ConfigState>({
-    openaiConfigured: false,
+    workflowsReady: false,
     supabaseConfigured: false,
   });
   const [editingPrompt, setEditingPrompt] = useState<PromptTemplate | null>(
@@ -131,12 +170,12 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
       const r = await fetch("/api/config");
       const d = (await r.json()) as ConfigState;
       setConfig({
-        openaiConfigured: Boolean(d.openaiConfigured),
+        workflowsReady: Boolean(d.workflowsReady),
         supabaseConfigured: Boolean(d.supabaseConfigured),
       });
     } catch {
       setConfig({
-        openaiConfigured: false,
+        workflowsReady: false,
         supabaseConfigured: false,
       });
     }
@@ -161,20 +200,24 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const hydrateSeq = useRef(0);
+  /** Strict Mode runs hydrate twice; if the first fetch succeeds and the second fails, do not clobber with SEED_LOGS. */
+  const hydrateSucceeded = useRef(false);
 
   useEffect(() => {
     const seq = ++hydrateSeq.current;
     const ac = new AbortController();
     void (async () => {
+      let finishedHydration = false;
       try {
-        const r = await fetch("/api/app-state", {
-          cache: "no-store",
+        const r = await fetch(appStateUrl(), {
+          ...APP_STATE_FETCH_BASE,
           signal: ac.signal,
         });
         let d: {
           persistence?: string;
           categories?: Category[];
           logs?: WorkflowLog[];
+          variantLabels?: Record<string, string>;
           warning?: string;
         };
         try {
@@ -183,36 +226,108 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
           throw new Error("app-state: response is not JSON");
         }
         if (!r.ok) {
-          console.error("[FinPrompt] app-state HTTP", r.status, d);
+          console.error("[Meridian] app-state HTTP", r.status, d);
           throw new Error(`app-state: HTTP ${r.status}`);
         }
         if (seq !== hydrateSeq.current) return;
         if (d.warning) console.warn(d.warning);
         if (Array.isArray(d.categories)) {
           if (d.persistence === "supabase") {
-            setCategories(d.categories);
+            setCategories(mergeSeedPromptVariables(d.categories));
           } else {
-            setCategories(loadLocalCategories() ?? d.categories);
+            setCategories(
+              mergeSeedPromptVariables(loadLocalCategories() ?? d.categories),
+            );
           }
         }
         if (!Array.isArray(d.logs)) {
-          console.error("[FinPrompt] app-state: missing or invalid logs[]", d);
+          console.error("[Meridian] app-state: missing or invalid logs[]", d);
           throw new Error("app-state: invalid payload");
         }
+        if (seq !== hydrateSeq.current) return;
         setLogs(d.logs.map((item) => coerceWorkflowLog(item)));
         setPersistenceEnabled(d.persistence === "supabase");
+        if (d.persistence === "supabase") {
+          setVariantLabels(
+            d.variantLabels &&
+              typeof d.variantLabels === "object" &&
+              !Array.isArray(d.variantLabels)
+              ? d.variantLabels
+              : {},
+          );
+        } else {
+          setVariantLabels(loadLocalVariantLabels() ?? {});
+        }
+        hydrateSucceeded.current = true;
+        finishedHydration = true;
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") return;
         const err = e as { name?: string };
         if (err?.name === "AbortError") return;
         if (seq !== hydrateSeq.current) return;
+        if (hydrateSucceeded.current) {
+          console.warn(
+            "[Meridian] app-state: a later hydrate request failed; keeping data from the successful load.",
+            e,
+          );
+          finishedHydration = true;
+          const recoverForSeq = seq;
+          void (async () => {
+            try {
+              const r = await fetch(appStateUrl(), APP_STATE_FETCH_BASE);
+              if (!r.ok) return;
+              const d = (await r.json()) as {
+                logs?: unknown[];
+                categories?: Category[];
+                persistence?: string;
+                variantLabels?: Record<string, string>;
+              };
+              if (recoverForSeq !== hydrateSeq.current) return;
+              if (Array.isArray(d.logs)) {
+                setLogs(d.logs.map((item) => coerceWorkflowLog(item)));
+              }
+              if (Array.isArray(d.categories)) {
+                if (d.persistence === "supabase") {
+                  setCategories(mergeSeedPromptVariables(d.categories));
+                } else {
+                  setCategories(
+                    mergeSeedPromptVariables(loadLocalCategories() ?? d.categories),
+                  );
+                }
+              }
+              if (d.persistence === "supabase" || d.persistence === "local") {
+                setPersistenceEnabled(d.persistence === "supabase");
+              }
+              if (d.persistence === "supabase") {
+                if (
+                  d.variantLabels &&
+                  typeof d.variantLabels === "object" &&
+                  !Array.isArray(d.variantLabels)
+                ) {
+                  setVariantLabels(d.variantLabels);
+                }
+              } else if (d.persistence === "local") {
+                setVariantLabels(loadLocalVariantLabels() ?? {});
+              }
+            } catch {
+              /* keep prior state */
+            }
+          })();
+          return;
+        }
         setCategories(
-          loadLocalCategories() ?? structuredClone(INITIAL_CATEGORIES),
+          mergeSeedPromptVariables(
+            loadLocalCategories() ?? structuredClone(INITIAL_CATEGORIES),
+          ),
         );
         setLogs(structuredClone(SEED_LOGS));
+        setVariantLabels(loadLocalVariantLabels() ?? {});
         setPersistenceEnabled(false);
+        finishedHydration = true;
       } finally {
-        if (seq === hydrateSeq.current) setDataHydrated(true);
+        if (finishedHydration && seq === hydrateSeq.current) {
+          setDataHydrated(true);
+        }
       }
     })();
     return () => ac.abort();
@@ -256,6 +371,34 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
     setEditingPrompt(null);
   }, []);
 
+  /**
+   * Replace the log list from /api/app-state only once the new row is visible there.
+   * Avoids overwriting the optimistic prepend with a stale read (replica / timing).
+   */
+  const reconcileLogsAfterPersistedRun = useCallback((expectedLogId: string) => {
+    const maxAttempts = 8;
+    const delayMs = 350;
+
+    void (async () => {
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        await new Promise((r) => setTimeout(r, attempt === 0 ? 250 : delayMs));
+        try {
+          const r = await fetch(appStateUrl(), APP_STATE_FETCH_BASE);
+          if (!r.ok) continue;
+          const d = (await r.json()) as { logs?: unknown[] };
+          if (!Array.isArray(d.logs)) continue;
+          const mapped = d.logs.map((item) => coerceWorkflowLog(item));
+          if (mapped.some((l) => l.id === expectedLogId)) {
+            setLogs(mapped);
+            return;
+          }
+        } catch {
+          /* retry */
+        }
+      }
+    })();
+  }, []);
+
   const handleRun = useCallback(async () => {
     if (!selectedPrompt) return;
     setLoading(true);
@@ -280,6 +423,7 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
           template: selectedPrompt.template,
           variables,
           enrichTicker: selectedPrompt.enrichTicker,
+          enrichPeerTickers: selectedPrompt.enrichPeerTickers,
           logMeta: {
             promptId: selectedPrompt.id,
             promptTitle: selectedPrompt.title,
@@ -310,6 +454,8 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
         marketDataStructured?: MarketDataBundle | null;
         logId?: string | null;
         logSaveError?: string | null;
+        fullPromptFingerprint?: string;
+        fullPromptExcerpt?: string;
       };
 
       setMarketData(data.marketData ?? "");
@@ -325,6 +471,7 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
           ? data.logId
           : `local-${globalThis.crypto?.randomUUID?.() ?? String(Date.now())}`;
 
+      const now = new Date();
       const newLog: WorkflowLog = {
         id: logId,
         promptId: selectedPrompt.id,
@@ -335,34 +482,68 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
         output: data.output ?? "",
         marketData: data.marketData ?? "",
         hadData: Boolean(data.hadData),
-        timestamp: new Date().toLocaleString(),
+        createdAt: now.toISOString(),
+        timestamp: now.toLocaleString(),
         rating: 0,
         fullPrompt: data.fullPrompt ?? "",
         marketDataStructured: data.marketDataStructured ?? null,
+        fullPromptFingerprint:
+          typeof data.fullPromptFingerprint === "string" &&
+          data.fullPromptFingerprint
+            ? data.fullPromptFingerprint
+            : undefined,
+        fullPromptExcerpt:
+          typeof data.fullPromptExcerpt === "string" && data.fullPromptExcerpt
+            ? data.fullPromptExcerpt
+            : undefined,
       };
       setLogs((prev) => [newLog, ...prev]);
+      if (
+        typeof data.logId === "string" &&
+        data.logId.length > 0 &&
+        !data.logId.startsWith("local-")
+      ) {
+        reconcileLogsAfterPersistedRun(data.logId);
+      }
     } catch {
       setError("Network error while executing workflow.");
     } finally {
       setLoading(false);
       setDataLoading(false);
     }
-  }, [selectedPrompt, variables, activeCategory]);
+  }, [selectedPrompt, variables, activeCategory, reconcileLogsAfterPersistedRun]);
 
   const handleSaveEdit = useCallback(() => {
-    if (!editingPrompt || !editText) return;
+    if (!editingPrompt) return;
+    const fullTemplate = buildFullTemplate(
+      editText,
+      editingPrompt.instructionFooter,
+    );
+    if (!fullTemplate.trim()) return;
+    const slotErr = validateTemplatePlaceholdersPreserved(
+      editingPrompt.template,
+      fullTemplate,
+    );
+    if (slotErr) {
+      setError(slotErr);
+      return;
+    }
+    setError("");
     const parentCat = categories.find((c) =>
       c.prompts.some((p) => p.id === editingPrompt.id),
     );
     const categoryId = parentCat?.id ?? activeCategory;
     const sortOrder = parentCat?.prompts.findIndex((p) => p.id === editingPrompt.id) ?? 0;
-    const updated: PromptTemplate = { ...editingPrompt, template: editText };
+    const updated: PromptTemplate = {
+      ...editingPrompt,
+      template: fullTemplate,
+    };
 
     setCategories((prev) => {
       const next = prev.map((cat) => ({
         ...cat,
         prompts: cat.prompts.map((p) =>
-          p.id === editingPrompt.id ? { ...p, template: editText } : p,
+          p.id === editingPrompt.id ? { ...p, template: fullTemplate } : p,
         ),
       }));
       if (!persistenceEnabled) saveLocalCategories(next);
@@ -370,7 +551,13 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
     });
     if (selectedPrompt?.id === editingPrompt.id) {
       setSelectedPrompt((prev) =>
-        prev ? { ...prev, template: editText } : prev,
+        prev
+          ? {
+              ...prev,
+              template: fullTemplate,
+              instructionFooter: editingPrompt.instructionFooter ?? prev.instructionFooter,
+            }
+          : prev,
       );
     }
     setEditingPrompt(null);
@@ -386,7 +573,7 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
           sortOrder,
         }),
       }).catch(() => {
-        console.error("[FinPrompt] Failed to persist prompt edit");
+        console.error("[Meridian] Failed to persist prompt edit");
       });
     }
   }, [
@@ -396,17 +583,35 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
     categories,
     activeCategory,
     persistenceEnabled,
+    setError,
   ]);
 
   const handleForkPrompt = useCallback(() => {
     if (!selectedPrompt) return;
+    const body =
+      editText ||
+      getInstructionBody(
+        selectedPrompt.template,
+        selectedPrompt.instructionFooter,
+      );
+    const forkTemplate = buildFullTemplate(body, selectedPrompt.instructionFooter);
+    const slotErr = validateTemplatePlaceholdersPreserved(
+      selectedPrompt.template,
+      forkTemplate,
+    );
+    if (slotErr) {
+      setError(slotErr);
+      return;
+    }
+    setError("");
     const cat = categories.find((c) => c.id === activeCategory);
     const sortOrder = cat ? cat.prompts.length : 0;
     const fork: PromptTemplate = {
       ...selectedPrompt,
       id: `${selectedPrompt.id}-fork-${Date.now()}`,
       title: `${selectedPrompt.title} (Custom)`,
-      template: editText || selectedPrompt.template,
+      template: forkTemplate,
+      instructionFooter: selectedPrompt.instructionFooter,
     };
 
     if (persistenceEnabled) {
@@ -419,7 +624,7 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
           sortOrder,
         }),
       }).catch(() => {
-        console.error("[FinPrompt] Failed to persist forked prompt");
+        console.error("[Meridian] Failed to persist forked prompt");
       });
     }
 
@@ -435,7 +640,14 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
     setEditingPrompt(null);
     setEditText("");
     setSelectedPrompt(fork);
-  }, [selectedPrompt, editText, activeCategory, categories, persistenceEnabled]);
+  }, [
+    selectedPrompt,
+    editText,
+    activeCategory,
+    categories,
+    persistenceEnabled,
+    setError,
+  ]);
 
   const rateLog = useCallback(
     async (logId: string, rating: number) => {
@@ -451,12 +663,144 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ rating }),
         });
-        if (!res.ok) console.error("[FinPrompt] Rating was not saved to the database");
+        if (!res.ok) console.error("[Meridian] Rating was not saved to the database");
       } catch {
-        console.error("[FinPrompt] Rating sync failed");
+        console.error("[Meridian] Rating sync failed");
       }
     },
     [persistenceEnabled],
+  );
+
+  const deleteLog = useCallback(
+    async (logId: string) => {
+      if (!window.confirm("Delete this run? This cannot be undone.")) return;
+      setViewingLog((v) => (v?.id === logId ? null : v));
+      setLogs((prev) => prev.filter((l) => l.id !== logId));
+
+      if (!persistenceEnabled) return;
+      if (!PERSISTED_LOG_ID_RE.test(logId)) return;
+
+      try {
+        const res = await fetch(`/api/logs/${encodeURIComponent(logId)}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) console.error("[Meridian] Log was not deleted from the database");
+      } catch {
+        console.error("[Meridian] Log delete failed");
+      }
+    },
+    [persistenceEnabled],
+  );
+
+  const setVariantLabel = useCallback(
+    (promptId: string, variantKey: string, label: string): boolean => {
+      const mapKey = makeVariantLabelKey(promptId, variantKey);
+      const t = label.trim();
+      if (!t) {
+        setVariantLabels((prev) => {
+          if (!(mapKey in prev)) return prev;
+          const next = { ...prev };
+          delete next[mapKey];
+          if (!persistenceEnabled) saveLocalVariantLabels(next);
+          return next;
+        });
+        if (persistenceEnabled) {
+          void fetch("/api/variant-labels", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ promptId, variantKey, label: "" }),
+          }).catch(() => {
+            console.error("[Meridian] Failed to clear variant label");
+          });
+        }
+        setError("");
+        return true;
+      }
+      if (t.length > 120) {
+        setError("Prompt name must be 120 characters or fewer.");
+        return false;
+      }
+      setError("");
+      setVariantLabels((prev) => {
+        const next = { ...prev, [mapKey]: t };
+        if (!persistenceEnabled) saveLocalVariantLabels(next);
+        return next;
+      });
+      if (persistenceEnabled) {
+        void fetch("/api/variant-labels", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ promptId, variantKey, label: t }),
+        }).catch(() => {
+          console.error("[Meridian] Failed to persist variant label");
+        });
+      }
+      return true;
+    },
+    [persistenceEnabled, setError],
+  );
+
+  const renameForkedPromptTitle = useCallback(
+    (categoryId: string, promptId: string, title: string): boolean => {
+      if (!isForkedPromptId(promptId)) {
+        setError("Only forked workflows can be renamed here.");
+        return false;
+      }
+      const t = title.trim();
+      if (!t) {
+        setError("Workflow name cannot be empty.");
+        return false;
+      }
+      if (t.length > 120) {
+        setError("Workflow name must be 120 characters or fewer.");
+        return false;
+      }
+      let applied = false;
+      setCategories((prev) => {
+        const cat = prev.find((c) => c.id === categoryId);
+        const prompt = cat?.prompts.find((p) => p.id === promptId);
+        if (!cat || !prompt || !isForkedPromptId(prompt.id)) return prev;
+        applied = true;
+        const sortOrder = cat.prompts.findIndex((p) => p.id === promptId);
+        const updated: PromptTemplate = { ...prompt, title: t };
+        const next = prev.map((c) =>
+          c.id === categoryId
+            ? {
+                ...c,
+                prompts: c.prompts.map((p) =>
+                  p.id === promptId ? updated : p,
+                ),
+              }
+            : c,
+        );
+        if (persistenceEnabled) {
+          void fetch("/api/prompts", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ categoryId, prompt: updated, sortOrder }),
+          }).catch(() => {
+            console.error("[Meridian] Failed to persist fork rename");
+          });
+        } else {
+          saveLocalCategories(next);
+        }
+        return next;
+      });
+      if (!applied) return false;
+      setError("");
+      setLogs((prev) =>
+        prev.map((l) =>
+          l.promptId === promptId && l.categoryId === categoryId
+            ? { ...l, promptTitle: t }
+            : l,
+        ),
+      );
+      setSelectedPrompt((prev) =>
+        prev?.id === promptId ? { ...prev, title: t } : prev,
+      );
+      return true;
+    },
+    [persistenceEnabled, setError],
   );
 
   const mergeServerLog = useCallback((log: WorkflowLog) => {
@@ -477,7 +821,7 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    (): FinPromptContextValue => ({
+    (): MeridianContextValue => ({
       categories,
       setCategories,
       view,
@@ -516,6 +860,10 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
       handleSaveEdit,
       handleForkPrompt,
       rateLog,
+      deleteLog,
+      variantLabels,
+      setVariantLabel,
+      renameForkedPromptTitle,
       mergeServerLog,
       activeCategoryObj,
       dataHydrated,
@@ -536,6 +884,7 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
       marketData,
       marketStructured,
       logs,
+      variantLabels,
       config,
       refreshConfig,
       editingPrompt,
@@ -548,6 +897,9 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
       handleSaveEdit,
       handleForkPrompt,
       rateLog,
+      deleteLog,
+      setVariantLabel,
+      renameForkedPromptTitle,
       mergeServerLog,
       activeCategoryObj,
       dataHydrated,
@@ -556,12 +908,12 @@ export function FinPromptProvider({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <FinPromptContext.Provider value={value}>{children}</FinPromptContext.Provider>
+    <MeridianContext.Provider value={value}>{children}</MeridianContext.Provider>
   );
 }
 
-export function useFinPrompt() {
-  const ctx = useContext(FinPromptContext);
-  if (!ctx) throw new Error("useFinPrompt must be used within FinPromptProvider");
+export function useMeridian() {
+  const ctx = useContext(MeridianContext);
+  if (!ctx) throw new Error("useMeridian must be used within MeridianProvider");
   return ctx;
 }

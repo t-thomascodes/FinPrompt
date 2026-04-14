@@ -1,7 +1,12 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useFinPrompt } from "@/context/FinPromptContext";
+import { useMeridian } from "@/context/MeridianContext";
+import {
+  listTemplatePlaceholderKeys,
+  templateWithFriendlyPlaceholders,
+} from "@/lib/templateDisplay";
+import { getInstructionBody } from "@/lib/promptInstructionFooter";
 
 export function WorkflowConfig() {
   const {
@@ -18,12 +23,22 @@ export function WorkflowConfig() {
     handleRun,
     loading,
     dataLoading,
-  } = useFinPrompt();
+    setError,
+  } = useMeridian();
 
   if (!selectedPrompt || !activeCategoryObj) return null;
 
   const color = activeCategoryObj.color;
-  const missingVars = selectedPrompt.variables.some((v) => !variables[v.key]);
+  const missingVars = selectedPrompt.variables.some((v) => {
+    if (v.optional) return false;
+    if (
+      selectedPrompt.enrichPeerTickers &&
+      v.key === selectedPrompt.enrichPeerTickers
+    ) {
+      return false;
+    }
+    return !variables[v.key]?.trim();
+  });
   const disabled = loading || dataLoading || missingVars;
 
   return (
@@ -43,6 +58,9 @@ export function WorkflowConfig() {
                 }}
               >
                 {"\u25C9 LIVE"}
+                {selectedPrompt.enrichPeerTickers
+                  ? ` + ${selectedPrompt.enrichPeerTickers}`
+                  : ""}
               </span>
             ) : null}
           </div>
@@ -54,8 +72,14 @@ export function WorkflowConfig() {
           <button
             type="button"
             onClick={() => {
+              setError("");
               setEditingPrompt(selectedPrompt);
-              setEditText(selectedPrompt.template);
+              setEditText(
+                getInstructionBody(
+                  selectedPrompt.template,
+                  selectedPrompt.instructionFooter,
+                ),
+              );
             }}
             className="rounded-fp-btn border-[0.5px] border-fp-border bg-fp-surface px-2.5 py-1 font-sans text-[11px] text-fp-text-secondary transition-colors hover:border-fp-border-hover hover:text-fp-text-primary"
           >
@@ -72,6 +96,46 @@ export function WorkflowConfig() {
 
       {editingPrompt?.id === selectedPrompt.id ? (
         <div className="mb-3.5">
+          <p className="mb-2 font-sans text-[10px] leading-snug text-fp-text-dim">
+            {editingPrompt.instructionFooter ? (
+              <>
+                Edit your instructions only. Ticker line, company name (when applicable), and live
+                market data are appended after this text automatically — you do not need to include
+                them. Any tokens below must stay in your text exactly (e.g.{" "}
+                <span className="font-mono text-fp-text-secondary">{"{{TICKER}}"}</span>
+                ).
+              </>
+            ) : (
+              <>
+                Edit the instructions only. Each field below must stay in the text exactly as a
+                token (e.g.{" "}
+                <span className="font-mono text-fp-text-secondary">{"{{TICKER}}"}</span>
+                ); values are filled from the inputs when you run the workflow.
+              </>
+            )}
+          </p>
+          <div className="mb-2 flex flex-wrap gap-1">
+            {listTemplatePlaceholderKeys(
+              getInstructionBody(
+                editingPrompt.template,
+                editingPrompt.instructionFooter,
+              ),
+            ).map((key) => {
+              const v = editingPrompt.variables.find((x) => x.key === key);
+              return (
+                <span
+                  key={key}
+                  className="rounded-fp-badge border-[0.5px] border-fp-border bg-fp-surface-secondary px-1.5 py-px font-mono text-[9px] text-fp-text-secondary"
+                  title="Required token — do not remove or rename"
+                >
+                  {v ? `${v.label}: ` : ""}
+                  {"{{"}
+                  {key}
+                  {"}}"}
+                </span>
+              );
+            })}
+          </div>
           <textarea
             value={editText}
             onChange={(e) => setEditText(e.target.value)}
@@ -82,6 +146,19 @@ export function WorkflowConfig() {
               } as CSSProperties
             }
           />
+          {editingPrompt.instructionFooter ? (
+            <div className="mt-2 rounded-fp-card border-[0.5px] border-dashed border-fp-border bg-fp-surface-secondary/60 px-3 py-2">
+              <div className="mb-1 font-sans text-[9px] font-semibold uppercase tracking-wide text-fp-text-muted">
+                Appended automatically (not editable)
+              </div>
+              <div className="whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-fp-text-dim">
+                {templateWithFriendlyPlaceholders(
+                  editingPrompt.instructionFooter,
+                  editingPrompt.variables,
+                )}
+              </div>
+            </div>
+          ) : null}
           <div className="mt-2 flex flex-wrap gap-2">
             <button
               type="button"
@@ -101,6 +178,7 @@ export function WorkflowConfig() {
             <button
               type="button"
               onClick={() => {
+                setError("");
                 setEditingPrompt(null);
                 setEditText("");
               }}

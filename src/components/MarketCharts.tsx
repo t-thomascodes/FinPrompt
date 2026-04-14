@@ -22,6 +22,11 @@ const chartFont = {
   fontFamily: "var(--font-dm-sans), system-ui, sans-serif",
 };
 
+const barAxisFont = {
+  fontSize: 12,
+  fontFamily: chartFont.fontFamily,
+};
+
 function quarterTick(iso: string): string {
   const [y, m] = iso.split("-").map(Number);
   if (!y || !m) return iso;
@@ -153,30 +158,36 @@ export function MarketCharts({ bundle, workflowId, accent }: Props) {
       ) : null}
 
       {showRev && revRows.length ? (
-        <div className="w-full">
-          <div className="mb-1.5 font-sans text-[11px] font-semibold text-fp-text-muted">
+        <div className="w-full min-w-0">
+          <div className="mb-2 font-sans text-[12px] font-semibold text-fp-text-muted">
             Quarterly revenue (billions)
           </div>
-          <div className="h-[140px] w-full">
+          <div className="h-[220px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={revRows} margin={{ top: 2, right: 8, left: 0, bottom: 2 }}>
+              <BarChart
+                data={revRows}
+                barCategoryGap="36%"
+                margin={{ top: 6, right: 10, left: 4, bottom: 6 }}
+              >
                 <CartesianGrid stroke="rgba(0,0,0,0.06)" vertical={false} />
                 <XAxis
                   dataKey="label"
-                  tick={{ ...chartFont, fill: "#8A8A8A" }}
+                  tick={{ ...barAxisFont, fill: "#8A8A8A" }}
                   axisLine={false}
                   tickLine={false}
+                  tickMargin={8}
                 />
                 <YAxis
-                  tick={{ ...chartFont, fill: "#8A8A8A" }}
-                  width={36}
+                  tick={{ ...barAxisFont, fill: "#8A8A8A" }}
+                  width={40}
                   axisLine={false}
                   tickLine={false}
+                  tickMargin={6}
                 />
                 <Tooltip
                   contentStyle={{
                     fontFamily: chartFont.fontFamily,
-                    fontSize: 11,
+                    fontSize: 12,
                     border: "none",
                     boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
                   }}
@@ -186,7 +197,13 @@ export function MarketCharts({ bundle, workflowId, accent }: Props) {
                       : ["", ""]
                   }
                 />
-                <Bar dataKey="revenue" fill={accent} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                <Bar
+                  dataKey="revenue"
+                  fill={accent}
+                  maxBarSize={52}
+                  radius={[5, 5, 0, 0]}
+                  isAnimationActive={false}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -194,37 +211,50 @@ export function MarketCharts({ bundle, workflowId, accent }: Props) {
       ) : null}
 
       {showEps && epsRows.some((r) => r.actual != null || r.estimate != null) ? (
-        <div className="w-full">
-          <div className="mb-1.5 font-sans text-[11px] font-semibold text-fp-text-muted">
+        <div className="w-full min-w-0">
+          <div className="mb-2 font-sans text-[12px] font-semibold text-fp-text-muted">
             EPS actual vs estimate
           </div>
-          <div className="h-[140px] w-full">
+          <div className="h-[220px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={epsRows} margin={{ top: 2, right: 8, left: 0, bottom: 2 }}>
+              <BarChart
+                data={epsRows}
+                barCategoryGap="28%"
+                barGap={4}
+                margin={{ top: 6, right: 10, left: 4, bottom: 6 }}
+              >
                 <CartesianGrid stroke="rgba(0,0,0,0.06)" vertical={false} />
                 <XAxis
                   dataKey="label"
-                  tick={{ ...chartFont, fill: "#8A8A8A" }}
+                  tick={{ ...barAxisFont, fill: "#8A8A8A" }}
                   axisLine={false}
                   tickLine={false}
+                  tickMargin={8}
                 />
                 <YAxis
-                  tick={{ ...chartFont, fill: "#8A8A8A" }}
-                  width={36}
+                  tick={{ ...barAxisFont, fill: "#8A8A8A" }}
+                  width={40}
                   axisLine={false}
                   tickLine={false}
+                  tickMargin={6}
                 />
                 <Tooltip
                   contentStyle={{
                     fontFamily: chartFont.fontFamily,
-                    fontSize: 11,
+                    fontSize: 12,
                     border: "none",
                     boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
                   }}
                 />
-                <Legend wrapperStyle={{ fontFamily: chartFont.fontFamily, fontSize: 11 }} />
-                <Bar dataKey="estimate" name="Estimate" fill={estColor} isAnimationActive={false} />
-                <Bar dataKey="actual" name="Actual" isAnimationActive={false}>
+                <Legend wrapperStyle={{ fontFamily: chartFont.fontFamily, fontSize: 12 }} />
+                <Bar
+                  dataKey="estimate"
+                  name="Estimate"
+                  fill={estColor}
+                  maxBarSize={44}
+                  isAnimationActive={false}
+                />
+                <Bar dataKey="actual" name="Actual" maxBarSize={44} isAnimationActive={false}>
                   {epsRows.map((row, i) => (
                     <Cell
                       key={i}

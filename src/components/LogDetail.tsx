@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useFinPrompt } from "@/context/FinPromptContext";
+import { useMeridian } from "@/context/MeridianContext";
 import { ExportBar } from "@/components/ExportBar";
 import { MarketDataPanel } from "@/components/MarketDataPanel";
 import { MarketCharts } from "@/components/MarketCharts";
@@ -15,8 +15,15 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function LogDetail() {
-  const { viewingLog, setViewingLog, categories, rateLog, mergeServerLog, view } =
-    useFinPrompt();
+  const {
+    viewingLog,
+    setViewingLog,
+    categories,
+    rateLog,
+    deleteLog,
+    mergeServerLog,
+    view,
+  } = useMeridian();
   const [detail, setDetail] = useState<WorkflowLog | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
@@ -77,14 +84,23 @@ export function LogDetail() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-fp-bg">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
-        <button
-          type="button"
-          onClick={() => setViewingLog(null)}
-          className="mb-4 rounded-fp-btn border-[0.5px] border-fp-border bg-fp-surface px-3 py-1.5 font-sans text-[11px] text-fp-text-muted hover:bg-fp-surface-secondary hover:text-fp-text-primary"
-        >
-          {"\u2190"}{" "}
-          {view === "workflowHistory" ? "Back to workflow runs" : "Back to logs"}
-        </button>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setViewingLog(null)}
+            className="rounded-fp-btn border-[0.5px] border-fp-border bg-fp-surface px-3 py-1.5 font-sans text-[11px] text-fp-text-muted hover:bg-fp-surface-secondary hover:text-fp-text-primary"
+          >
+            {"\u2190"}{" "}
+            {view === "workflowHistory" ? "Back to workflow runs" : "Back to logs"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void deleteLog(entry.id)}
+            className="rounded-fp-btn border-[0.5px] border-fp-border bg-fp-surface px-3 py-1.5 font-sans text-[11px] text-fp-text-secondary hover:border-red-200 hover:bg-red-50 hover:text-red-800"
+          >
+            Delete run
+          </button>
+        </div>
         {blockExports ? (
           <p className="mb-3 font-sans text-[11px] text-fp-text-muted">
             Loading full log…

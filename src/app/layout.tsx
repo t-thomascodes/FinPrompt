@@ -15,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FinPrompt",
+  title: "Meridian",
   description: "AI workflow layer for asset management",
 };
 

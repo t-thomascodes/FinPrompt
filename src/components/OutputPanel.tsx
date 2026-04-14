@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { useFinPrompt } from "@/context/FinPromptContext";
+import { useRef } from "react";
+import { useMeridian } from "@/context/MeridianContext";
 import { resolvePrimaryInput } from "@/lib/exportFilename";
 import { MarketDataPanel } from "@/components/MarketDataPanel";
 import { MarketCharts } from "@/components/MarketCharts";
@@ -23,16 +23,10 @@ export function OutputPanel() {
     dataLoading,
     variables,
     logs,
-  } = useFinPrompt();
+  } = useMeridian();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const dashboardPdfRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [displayedText]);
 
   if (!selectedPrompt || !activeCategoryObj) return null;
 
@@ -110,9 +104,7 @@ export function OutputPanel() {
               Executing workflow
             </p>
             <p className="mt-2 text-xs text-fp-text-muted">
-              {dataLoading && selectedPrompt.enrichTicker
-                ? "Fetching market data and calling OpenAI…"
-                : "Calling OpenAI…"}
+              Fetching market data…
             </p>
           </div>
         ) : null}

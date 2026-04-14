@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   return NextResponse.json({
-    openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
+    workflowsReady: Boolean(process.env.OPENAI_API_KEY),
     supabaseConfigured: isSupabaseConfigured(),
   });
 }

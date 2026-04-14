@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { getWorkflowLogById, updateLogRating } from "@/lib/db/workflowDb";
+import {
+  deleteWorkflowLog,
+  getWorkflowLogById,
+  updateLogRating,
+} from "@/lib/db/workflowDb";
 import { getSupabaseAdmin } from "@/lib/supabase/adminClient";
 
 export const dynamic = "force-dynamic";
@@ -75,6 +79,33 @@ export async function PATCH(
   const ok = await updateLogRating(supabase, id, Math.round(rating));
   if (!ok) {
     return NextResponse.json({ error: "Update failed" }, { status: 500, headers: NO_STORE });
+  }
+  return NextResponse.json({ ok: true }, { headers: NO_STORE });
+}
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: { id: string } },
+) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return NextResponse.json(
+      { error: "Supabase is not configured" },
+      { status: 503, headers: NO_STORE },
+    );
+  }
+
+  const { id } = params;
+  if (!id || !UUID_RE.test(id)) {
+    return NextResponse.json(
+      { error: "Invalid log id" },
+      { status: 400, headers: NO_STORE },
+    );
+  }
+
+  const ok = await deleteWorkflowLog(supabase, id);
+  if (!ok) {
+    return NextResponse.json({ error: "Delete failed" }, { status: 500, headers: NO_STORE });
   }
   return NextResponse.json({ ok: true }, { headers: NO_STORE });
 }

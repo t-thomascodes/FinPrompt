@@ -37,7 +37,7 @@ export function buildExportBasename(
   const date = referenceTimestamp
     ? exportDateFromTimestamp(referenceTimestamp)
     : new Date().toISOString().slice(0, 10);
-  return `finprompt_${safeSegment(workflowSlug)}_${safeSegment(primaryInput)}_${date}`;
+  return `meridian_${safeSegment(workflowSlug)}_${safeSegment(primaryInput)}_${date}`;
 }
 
 export function resolvePrimaryInput(

@@ -94,35 +94,7 @@ const INITIAL_CATEGORIES = [
         ],
       },
     ],
-  },
-  {
-    id: "data",
-    label: "Data Analysis",
-    icon: "◊",
-    color: "#FFE66D",
-    prompts: [
-      {
-        id: "dataset-explore",
-        title: "Dataset Explorer",
-        description: "Structured analysis plan for any financial dataset.",
-        template: `You are a quantitative analyst. Dataset: {{DATASET_DESCRIPTION}}\n\n1. **Data Quality Checks**\n2. **Exploratory Analysis** — distributions, correlations\n3. **Feature Engineering** for {{USE_CASE}}\n4. **Statistical Tests**\n5. **Visualization Recommendations** — 5 charts\n6. **Python Code Skeleton**`,
-        variables: [
-          { key: "DATASET_DESCRIPTION", label: "Dataset", placeholder: "e.g. 10 years of daily returns" },
-          { key: "USE_CASE", label: "Use Case", placeholder: "e.g. factor-based selection" },
-        ],
-      },
-      {
-        id: "sql-query",
-        title: "SQL Query Builder",
-        description: "Optimized SQL queries for financial data extraction.",
-        template: `Write an optimized SQL query:\n\nObjective: {{OBJECTIVE}}\nTables: {{TABLES}}\n\n1. **Query** — production-ready with comments\n2. **Performance Notes** — indexing\n3. **Edge Cases** — NULLs, duplicates, dates\n4. **Validation Query**`,
-        variables: [
-          { key: "OBJECTIVE", label: "Objective", placeholder: "e.g. Top 10 by 30d momentum per sector" },
-          { key: "TABLES", label: "Tables", placeholder: "e.g. prices(date, ticker, close)" },
-        ],
-      },
-    ],
-  },
+  }
 ];
 
 // ─── API Helpers ─────────────────────────────────────────────────────────────
@@ -422,80 +394,6 @@ Columns: Ticker, EV/NTM Rev, Rev Growth %, Gross Margin %, Op Margin %, FCF Marg
     fullPrompt: "[full prompt text]",
   },
   {
-    id: 1008, promptId: "sql-query", promptTitle: "SQL Query Builder", categoryId: "data",
-    inputs: "Top 10 by 30d momentum per sector, prices(date,ticker,close) sectors(ticker,sector)", hadData: false, timestamp: "4/8/2026, 9:05:47 AM", rating: 5,
-    marketData: "",
-    output: `1. **The Query**
-
-\`\`\`sql
--- Top 10 stocks by 30-day price momentum within each sector
--- Momentum defined as (current_price - price_30d_ago) / price_30d_ago
-
-WITH latest_date AS (
-    SELECT MAX(date) AS max_date FROM prices
-),
-current_prices AS (
-    SELECT p.ticker, p.close AS current_close, p.date
-    FROM prices p
-    INNER JOIN latest_date ld ON p.date = ld.max_date
-),
-prices_30d_ago AS (
-    SELECT p.ticker, p.close AS prev_close, p.date
-    FROM prices p
-    INNER JOIN latest_date ld
-        ON p.date = (
-            SELECT MAX(date) FROM prices
-            WHERE date <= ld.max_date - INTERVAL '30 days'
-        )
-),
-momentum AS (
-    SELECT
-        c.ticker,
-        s.sector,
-        c.current_close,
-        p.prev_close,
-        ROUND((c.current_close - p.prev_close) / NULLIF(p.prev_close, 0) * 100, 2) AS momentum_pct
-    FROM current_prices c
-    INNER JOIN prices_30d_ago p ON c.ticker = p.ticker
-    INNER JOIN sectors s ON c.ticker = s.ticker
-),
-ranked AS (
-    SELECT *,
-        ROW_NUMBER() OVER (PARTITION BY sector ORDER BY momentum_pct DESC) AS rn
-    FROM momentum
-)
-SELECT sector, ticker, current_close, prev_close, momentum_pct
-FROM ranked
-WHERE rn <= 10
-ORDER BY sector, momentum_pct DESC;
-\`\`\`
-
-2. **Performance Notes**
-
-Create composite index on prices(date, ticker, close) for the self-join. Index on sectors(ticker) for the join. The CTE approach is readable but for 10,000+ tickers, consider materializing the 30-day lag as a pre-computed column. Estimated complexity: O(n log n) for the window function, dominated by the sort.
-
-3. **Edge Cases**
-
-- Tickers with <30 days of history will be excluded (INNER JOIN handles this)
-- NULLIF guards against division by zero on prev_close
-- If multiple prices exist for the same date (unlikely but possible in dirty data), the CTE will create duplicates — add DISTINCT or pick one via ROW_NUMBER
-- Weekends/holidays: using MAX(date) <= 30 days ago handles non-trading days correctly
-
-4. **Validation Query**
-
-\`\`\`sql
--- Verify: count should be exactly 10 per sector (or fewer if sector has <10 stocks)
-SELECT sector, COUNT(*) AS cnt
-FROM ranked WHERE rn <= 10
-GROUP BY sector ORDER BY sector;
-
--- Spot check: momentum should be monotonically decreasing within each sector
-SELECT sector, ticker, momentum_pct, rn
-FROM ranked WHERE rn <= 3 ORDER BY sector, rn;
-\`\`\``,
-    fullPrompt: "[full prompt text]",
-  },
-  {
     id: 1009, promptId: "compliance-check", promptTitle: "Compliance Pre-Trade Check", categoryId: "risk",
     inputs: "Buy 50,000 shares of XYZ at market", hadData: false, timestamp: "4/7/2026, 11:30:00 AM", rating: 4,
     marketData: "",
@@ -529,54 +427,11 @@ FROM ranked WHERE rn <= 3 ORDER BY sector, rn;
 Pre-trade: investment thesis memo, compliance sign-off, restricted list check (timestamped). Post-trade: execution report with fill details, best execution analysis, updated portfolio exposure report.`,
     fullPrompt: "[full prompt text]",
   },
-  {
-    id: 1010, promptId: "dataset-explore", promptTitle: "Dataset Explorer", categoryId: "data",
-    inputs: "5 years daily options flow, unusual activity detection", hadData: false, timestamp: "4/7/2026, 9:18:22 AM", rating: 3,
-    marketData: "",
-    output: `1. **Data Quality Checks**
-
-- Verify no missing trading days (should have ~252 rows per year × 5 = ~1,260 trading days)
-- Check for duplicate entries on same date/ticker/strike/expiry combinations
-- Validate premium values are positive and volume ≥ open interest changes make logical sense
-- Flag any records where implied volatility is 0 or negative (data error)
-- Check bid-ask spread reasonableness: spreads wider than 50% of mid-price suggest illiquid or stale quotes
-
-2. **Exploratory Analysis**
-
-- Distribution of daily total options volume by underlying (identify concentration)
-- Put/call ratio time series — look for regime shifts around major market events
-- Volume vs. open interest scatter — clusters above the diagonal indicate unusual activity
-- Implied volatility term structure by sector over time
-- Correlation between unusual options flow and subsequent 5/10/20-day stock returns
-
-3. **Feature Engineering**
-
-- Volume/OI ratio (daily) — values >3 suggest unusual activity
-- Premium-weighted directional indicator (net call premium - net put premium, normalized by ADV)
-- IV rank (current IV percentile vs. trailing 252-day range)
-- Sweep detection flag: orders executed across multiple exchanges within 1-second window
-- Size anomaly score: Z-score of trade size vs. trailing 20-day average for that ticker
-
-4. **Statistical Tests**
-
-- Two-sample t-test: compare forward returns after high vs. low unusual activity days
-- Granger causality: does options flow predict next-day stock returns?
-- Chi-squared: is unusual call activity independent of sector?
-
-5. **Top 5 Visualizations**
-
-- Heatmap of unusual activity frequency by sector × month
-- Scatter: Volume/OI ratio vs. 5-day forward return (with regression line)
-- Time series: rolling 20-day unusual activity count with S&P 500 overlay
-- Distribution of trade sizes with anomaly threshold marked
-- Sankey diagram: flow from unusual activity detection → direction (call/put) → outcome (profitable/not)`,
-    fullPrompt: "[full prompt text]",
-  },
 ];
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-export default function FinPrompt() {
+export default function Meridian() {
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
   const [view, setView] = useState("workflows"); // workflows | analytics | logs
   const [activeCategory, setActiveCategory] = useState("research");
@@ -727,7 +582,7 @@ export default function FinPrompt() {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ width: 30, height: 30, background: "linear-gradient(135deg, #00D4AA, #00A885)", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: F, fontWeight: 700, fontSize: 15, color: "#0A0E17" }}>F</div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 15, color: "#fff" }}>FinPrompt</div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: "#fff" }}>Meridian</div>
             <div style={{ fontSize: 10, color: "#3A4558", letterSpacing: "1.5px", textTransform: "uppercase" }}>AI Workflow Layer for Asset Management</div>
           </div>
         </div>

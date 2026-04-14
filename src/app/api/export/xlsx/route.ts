@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   }
 
   const buf = await buildXlsxBuffer(payload);
-  const name = filename || "finprompt_export.xlsx";
+  const name = filename || "meridian_export.xlsx";
   return new Response(new Uint8Array(buf), {
     status: 200,
     headers: {

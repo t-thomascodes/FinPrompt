@@ -1,15 +1,18 @@
 import type { Category, PromptTemplate, Variable } from "@/lib/types";
 
-const STORAGE_KEY = "finprompt:v1:local-categories";
+const STORAGE_KEY = "meridian:v1:local-categories";
 
 function isVariable(x: unknown): x is Variable {
   if (!x || typeof x !== "object") return false;
   const o = x as Record<string, unknown>;
-  return (
-    typeof o.key === "string" &&
-    typeof o.label === "string" &&
-    typeof o.placeholder === "string"
-  );
+  if (
+    typeof o.key !== "string" ||
+    typeof o.label !== "string" ||
+    typeof o.placeholder !== "string"
+  )
+    return false;
+  if (o.optional !== undefined && typeof o.optional !== "boolean") return false;
+  return true;
 }
 
 function isPromptTemplate(x: unknown): x is PromptTemplate {
@@ -25,6 +28,16 @@ function isPromptTemplate(x: unknown): x is PromptTemplate {
     return false;
   if (!o.variables.every(isVariable)) return false;
   if (o.enrichTicker !== undefined && typeof o.enrichTicker !== "string")
+    return false;
+  if (
+    o.enrichPeerTickers !== undefined &&
+    typeof o.enrichPeerTickers !== "string"
+  )
+    return false;
+  if (
+    o.instructionFooter !== undefined &&
+    typeof o.instructionFooter !== "string"
+  )
     return false;
   return true;
 }

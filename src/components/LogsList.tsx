@@ -1,13 +1,13 @@
 "use client";
 
-import { useFinPrompt } from "@/context/FinPromptContext";
+import { useMeridian } from "@/context/MeridianContext";
 import { StarRating } from "@/components/StarRating";
 import { stripMarkdownForPreview } from "@/lib/formatLogPreview";
 import { normalizeStarRating } from "@/lib/normalizeRating";
 import type { WorkflowLog } from "@/lib/types";
 
 export function LogsList() {
-  const { logs, setViewingLog, rateLog } = useFinPrompt();
+  const { logs, setViewingLog, rateLog, deleteLog } = useMeridian();
 
   if (logs.length === 0) {
     return (
@@ -28,6 +28,7 @@ export function LogsList() {
           log={log}
           onView={() => setViewingLog(log)}
           onRate={(r) => rateLog(log.id, r)}
+          onDelete={() => void deleteLog(log.id)}
         />
       ))}
     </div>
@@ -38,12 +39,15 @@ export function LogRunRow({
   log,
   onView,
   onRate,
+  onDelete,
   /** When true, lead with inputs (e.g. ticker) — prompt title is the shared parent. */
   emphasizeInputs = false,
 }: {
   log: WorkflowLog;
   onView: () => void;
   onRate: (r: number) => void;
+  /** When set, shows a delete control (confirm is handled by the handler). */
+  onDelete?: () => void;
   emphasizeInputs?: boolean;
 }) {
   const preview = stripMarkdownForPreview(log.output ?? "", 200);
@@ -102,11 +106,26 @@ export function LogRunRow({
             </>
           )}
         </div>
-        <StarRating
-          rating={stars}
-          onRate={onRate}
-          stopPropagation
-        />
+        <div className="flex shrink-0 items-start gap-1">
+          <StarRating
+            rating={stars}
+            onRate={onRate}
+            stopPropagation
+          />
+          {onDelete ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="rounded-fp-btn border-[0.5px] border-transparent bg-transparent px-1.5 py-0.5 font-sans text-[11px] text-fp-text-muted opacity-70 transition-colors hover:border-fp-border hover:text-fp-text-secondary group-hover:opacity-100"
+              aria-label="Delete run"
+            >
+              {"\u2715"}
+            </button>
+          ) : null}
+        </div>
       </div>
       {preview ? (
         <p className="line-clamp-2 text-left text-[11px] leading-snug text-fp-text-secondary">

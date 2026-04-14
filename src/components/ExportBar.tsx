@@ -8,6 +8,10 @@ import {
 } from "react";
 import { buildExportBasename } from "@/lib/exportFilename";
 import { downloadHybridMemoPdf } from "@/lib/downloadHybridMemoPdf";
+import {
+  captureDashboardPng,
+  DASHBOARD_CAPTURE_SCALE_DOCX,
+} from "@/lib/pdfDashboardImages";
 import type { ExportPayload } from "@/lib/types";
 import type { MarketDataBundle } from "@/lib/marketDataTypes";
 
@@ -48,37 +52,6 @@ function IconDoc() {
   );
 }
 
-function IconSheet() {
-  return (
-    <svg
-      className="h-4 w-4 shrink-0 opacity-90"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      aria-hidden
-    >
-      <path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18" />
-    </svg>
-  );
-}
-
-function IconSlides() {
-  return (
-    <svg
-      className="h-4 w-4 shrink-0 opacity-90"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      aria-hidden
-    >
-      <rect x="2" y="3" width="20" height="14" rx="2" />
-      <path d="M8 21h8M12 17v4" />
-    </svg>
-  );
-}
-
 function IconPdf() {
   return (
     <svg
@@ -114,7 +87,7 @@ function IconCopy() {
 
 export function ExportBar(props: Props) {
   const docked = props.docked !== false;
-  const [busy, setBusy] = useState<null | "docx" | "xlsx" | "pptx" | "pdf">(null);
+  const [busy, setBusy] = useState<null | "docx" | "pdf">(null);
   const [err, setErr] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -144,15 +117,27 @@ export function ExportBar(props: Props) {
   }, [props]);
 
   const downloadBlob = useCallback(
-    async (kind: "docx" | "xlsx" | "pptx") => {
+    async (kind: "docx") => {
       const filename = `${base}.${kind}`;
+      let exportBody: ExportPayload & { filename: string } = {
+        ...payload(),
+        filename,
+      };
+      if (kind === "docx") {
+        const el = props.dashboardCaptureRef?.current ?? null;
+        if (el) {
+          const png = await captureDashboardPng(el, {
+            scale: DASHBOARD_CAPTURE_SCALE_DOCX,
+          });
+          if (png) {
+            exportBody = { ...exportBody, dashboardPngBase64: png };
+          }
+        }
+      }
       const res = await fetch(`/api/export/${kind}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...payload(),
-          filename,
-        }),
+        body: JSON.stringify(exportBody),
       });
 
       const ct = res.headers.get("content-type") ?? "";
@@ -182,11 +167,11 @@ export function ExportBar(props: Props) {
       document.body.removeChild(a);
       URL.revokeObjectURL(href);
     },
-    [base, payload],
+    [base, payload, props.dashboardCaptureRef],
   );
 
   const download = useCallback(
-    async (kind: "docx" | "xlsx" | "pptx") => {
+    async (kind: "docx") => {
       setErr("");
       setBusy(kind);
       try {
@@ -280,28 +265,6 @@ export function ExportBar(props: Props) {
         >
           <IconDoc />
           {busy === "docx" ? "…" : "Word"}
-        </button>
-        <button
-          type="button"
-          className={btn}
-          style={accentBorder}
-          disabled={fileDisabled}
-          aria-busy={busy === "xlsx"}
-          onClick={() => void download("xlsx")}
-        >
-          <IconSheet />
-          {busy === "xlsx" ? "…" : "Excel"}
-        </button>
-        <button
-          type="button"
-          className={btn}
-          style={accentBorder}
-          disabled={fileDisabled}
-          aria-busy={busy === "pptx"}
-          onClick={() => void download("pptx")}
-        >
-          <IconSlides />
-          {busy === "pptx" ? "…" : "PowerPoint"}
         </button>
         <button
           type="button"

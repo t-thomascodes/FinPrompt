@@ -12,15 +12,57 @@ export interface ParsedSection {
   title?: string;
   content: string;
   children?: ParsedSection[];
-  /** For `heading`: markdown ## / ### depth */
-  headingLevel?: 2 | 3;
+  /** For `heading`: markdown ##–#### depth */
+  headingLevel?: 2 | 3 | 4;
 }
 
 function isTableLine(line: string): boolean {
   const t = line.trim();
   if (!t.includes("|")) return false;
+  // Table rows in model output almost always start with "|"; avoids treating prose "a | b" as a row.
+  if (!t.startsWith("|")) return false;
   if (/^\|[\s\-:|]+\|\s*$/.test(t)) return false;
   return t.split("|").filter(Boolean).length >= 2;
+}
+
+function isTableSeparatorLine(line: string): boolean {
+  const t = line.trim();
+  return /^\|[\s\-:|]+\|\s*$/.test(t);
+}
+
+/** ATX `####`–`######` title (exact run length; avoids matching seven `#`). */
+function parseAtxHeading456(trimmed: string): string | null {
+  let n = 0;
+  while (n < trimmed.length && trimmed[n] === "#") n += 1;
+  if (n < 4 || n > 6) return null;
+  if (n < trimmed.length && trimmed[n] === "#") return null;
+  const rest = trimmed.slice(n).trimStart();
+  return rest.length > 0 ? rest : null;
+}
+
+/** Line starts a heading or other block that must end a paragraph / numbered body. */
+function breaksStructuredBlock(T: string): boolean {
+  if (parseAtxHeading456(T) !== null) return true;
+  if (/^###\s+\S/.test(T)) return true;
+  if (/^##\s+\S/.test(T)) return true;
+  if (/^#\s+\S/.test(T)) return true;
+  if (/^\*\*.+\*\*$/.test(T)) return true;
+  return false;
+}
+
+/** One-line model section title before `1.` / `####` / bullets (not full Markdown). */
+function isLikelySectionBanner(s: string): boolean {
+  const t = s.trim();
+  if (t.length < 2 || t.length > 72) return false;
+  if (/^#{1,6}/.test(t)) return false;
+  if (/^\d+\./.test(t)) return false;
+  if (/^[-•\u25B8\u203A\u25BA\u25B9]/.test(t)) return false;
+  if (t.includes("|")) return false;
+  if (/^:\s*\S/.test(t)) return false;
+  if (/[.!?]\s/.test(t)) return false;
+  // Avoid metric-style lines before a bullet (e.g. "REGN's Value: 4.95×")
+  if (/\d|[%$‰]|×/.test(t)) return false;
+  return true;
 }
 
 export function parseOutput(text: string): ParsedSection[] {
@@ -52,13 +94,18 @@ export function parseOutput(text: string): ParsedSection[] {
       continue;
     }
 
+    if (isTableSeparatorLine(trimmed)) {
+      i += 1;
+      continue;
+    }
+
     if (isTableLine(line)) {
       const tableLines: string[] = [];
       while (i < lines.length) {
         const L = lines[i];
         const T = L.trim();
         if (T === "") break;
-        if (/^\|[\s\-:|]+\|\s*$/.test(T)) {
+        if (isTableSeparatorLine(T)) {
           i += 1;
           continue;
         }
@@ -82,6 +129,17 @@ export function parseOutput(text: string): ParsedSection[] {
         type: "heading",
         content: trimmed.replace(/^###\s+/, "").trim(),
         headingLevel: 3,
+      });
+      i += 1;
+      continue;
+    }
+
+    const h456 = parseAtxHeading456(trimmed);
+    if (h456 !== null) {
+      sections.push({
+        type: "heading",
+        content: h456,
+        headingLevel: 4,
       });
       i += 1;
       continue;
@@ -130,14 +188,70 @@ export function parseOutput(text: string): ParsedSection[] {
       continue;
     }
 
-    if (/^[-•\u25B8\u203A\u25BA\u25B9]\s/.test(trimmed)) {
+    const numStandalone = trimmed.match(/^(\d+)\.\s*$/);
+    if (numStandalone) {
+      const level = parseInt(numStandalone[1], 10);
+      i += 1;
+      while (i < lines.length && lines[i].trim() === "") i += 1;
+      if (i >= lines.length) {
+        sections.push({ type: "numbered", level, title: "", content: "" });
+        continue;
+      }
+      const title = lines[i].trim();
+      i += 1;
+      const contentParts: string[] = [];
+      while (i < lines.length) {
+        const L = lines[i];
+        const T = L.trim();
+        if (T === "") break;
+        if (T.startsWith("```")) break;
+        if (isTableLine(L)) break;
+        if (isTableSeparatorLine(T)) break;
+        if (breaksStructuredBlock(T)) break;
+        if (/^\d+\.\s*$/.test(T)) break;
+        if (/^\d+\.\s+/.test(T)) break;
+        if (/^[-•\u25B8\u203A\u25BA\u25B9]\s*/.test(T)) break;
+        contentParts.push(T.replace(/^:\s*/, ""));
+        i += 1;
+      }
+      sections.push({
+        type: "numbered",
+        level,
+        title,
+        content: contentParts.join("\n").trim(),
+      });
+      continue;
+    }
+
+    if (/^[-•\u25B8\u203A\u25BA\u25B9]\s*/.test(trimmed)) {
       sections.push({
         type: "bullet",
         level: 1,
-        content: trimmed.replace(/^[-•\u25B8\u203A\u25BA\u25B9]\s/, ""),
+        content: trimmed.replace(/^[-•\u25B8\u203A\u25BA\u25B9]\s*/, ""),
       });
       i += 1;
       continue;
+    }
+
+    {
+      let k = i + 1;
+      while (k < lines.length && lines[k].trim() === "") k += 1;
+      if (k < lines.length) {
+        const next = lines[k].trim();
+        const followedByStructured =
+          /^\d+\.\s*$/.test(next) ||
+          parseAtxHeading456(next) !== null ||
+          /^[-•\u25B8\u203A\u25BA\u25B9]\s*/.test(next);
+        if (followedByStructured && isLikelySectionBanner(trimmed)) {
+          sections.push({
+            type: "heading",
+            content: trimmed,
+            headingLevel: 3,
+          });
+          i += 1;
+          continue;
+        }
+      }
     }
 
     const para: string[] = [line];
@@ -148,11 +262,10 @@ export function parseOutput(text: string): ParsedSection[] {
       if (T === "") break;
       if (T.startsWith("```")) break;
       if (isTableLine(L)) break;
-      if (/^###\s+/.test(T)) break;
-      if (/^##\s+/.test(T)) break;
-      if (/^\*\*.+\*\*$/.test(T)) break;
+      if (breaksStructuredBlock(T)) break;
+      if (/^\d+\.\s*$/.test(T)) break;
       if (/^\d+\.\s+/.test(T)) break;
-      if (/^[-•\u25B8\u203A\u25BA\u25B9]\s/.test(T)) break;
+      if (/^[-•\u25B8\u203A\u25BA\u25B9]\s*/.test(T)) break;
       para.push(L);
       i += 1;
     }
@@ -269,7 +382,8 @@ export function planBodyRender(body: ParsedSection[]): BodyRenderPlan {
       s.type === "numbered" ||
       s.type === "heading" ||
       s.type === "table" ||
-      s.type === "code",
+      s.type === "code" ||
+      s.type === "bullet",
   );
   if (!structural && body.length > 0) {
     return { mode: "flow", sections: body };

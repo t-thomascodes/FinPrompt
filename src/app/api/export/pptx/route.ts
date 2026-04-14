@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   }
 
   const buf = await buildPptxBuffer(payload);
-  const name = filename || "finprompt_export.pptx";
+  const name = filename || "meridian_export.pptx";
   return new Response(new Uint8Array(buf), {
     status: 200,
     headers: {

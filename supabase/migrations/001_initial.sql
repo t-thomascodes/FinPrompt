@@ -1,4 +1,4 @@
--- FinPrompt core schema. Run in Supabase SQL Editor or via Supabase CLI.
+-- Meridian core schema. Run in Supabase SQL Editor or via Supabase CLI.
 
 create table if not exists public.categories (
   id text primary key,

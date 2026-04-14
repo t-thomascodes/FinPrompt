@@ -12,6 +12,15 @@ export function coerceWorkflowLog(raw: unknown): WorkflowLog {
       | null
       | undefined;
 
+  const createdRaw = o.created_at ?? o.createdAt;
+  const createdAt =
+    typeof createdRaw === "string" && createdRaw
+      ? (() => {
+          const d = new Date(createdRaw);
+          return Number.isFinite(d.getTime()) ? d.toISOString() : undefined;
+        })()
+      : undefined;
+
   return {
     id: String(o.id ?? ""),
     promptId: String(o.promptId ?? o.prompt_id ?? ""),
@@ -25,6 +34,7 @@ export function coerceWorkflowLog(raw: unknown): WorkflowLog {
     output: String(o.output ?? ""),
     marketData: String(o.marketData ?? o.market_data ?? ""),
     hadData: Boolean(o.hadData ?? o.had_data),
+    createdAt,
     timestamp:
       typeof o.timestamp === "string" && o.timestamp
         ? o.timestamp
@@ -37,5 +47,18 @@ export function coerceWorkflowLog(raw: unknown): WorkflowLog {
     fullPrompt: String(o.fullPrompt ?? o.full_prompt ?? ""),
     marketDataStructured:
       structured !== undefined ? structured : null,
+    fullPromptFingerprint:
+      typeof o.fullPromptFingerprint === "string" && o.fullPromptFingerprint
+        ? o.fullPromptFingerprint
+        : typeof o.full_prompt_fingerprint === "string" &&
+            o.full_prompt_fingerprint
+          ? o.full_prompt_fingerprint
+          : undefined,
+    fullPromptExcerpt:
+      typeof o.fullPromptExcerpt === "string" && o.fullPromptExcerpt
+        ? o.fullPromptExcerpt
+        : typeof o.full_prompt_excerpt === "string" && o.full_prompt_excerpt
+          ? o.full_prompt_excerpt
+          : undefined,
   };
 }

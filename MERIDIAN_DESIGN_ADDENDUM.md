@@ -1,6 +1,6 @@
-# FinPrompt — Design Addendum
+# Meridian — Design Addendum
 
-Append this to `FINPROMPT_SPEC.md` or reference it alongside. This overrides the dark theme and flat output layout from the original spec. Everything else in the original spec (API routes, data model, export logic, project structure) remains unchanged.
+Append this to `MERIDIAN_SPEC.md` or reference it alongside. This overrides the dark theme and flat output layout from the original spec. Everything else in the original spec (API routes, data model, export logic, project structure) remains unchanged.
 
 ---
 
@@ -307,13 +307,13 @@ The output parser needs to handle Claude's markdown and map it to the visual com
 ## File Naming for Exports
 
 ```
-finprompt_[workflow-slug]_[primary-input]_[YYYY-MM-DD].[ext]
+meridian_[workflow-slug]_[primary-input]_[YYYY-MM-DD].[ext]
 ```
 
 Examples:
-- `finprompt_bull-bear_NVDA_2026-04-10.docx`
-- `finprompt_earnings-prep_AAPL_2026-04-10.xlsx`
-- `finprompt_risk-assessment_TSLA_2026-04-10.pptx`
+- `meridian_bull-bear_NVDA_2026-04-10.docx`
+- `meridian_earnings-prep_AAPL_2026-04-10.xlsx`
+- `meridian_risk-assessment_TSLA_2026-04-10.pptx`
 
 ---
 

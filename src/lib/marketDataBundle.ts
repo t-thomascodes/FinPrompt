@@ -556,6 +556,44 @@ export function formatMarketDataForPrompt(b: MarketDataBundle): string {
   return lines.filter((l) => l !== "").join("\n");
 }
 
+/**
+ * Shorter block for peer tickers so multi-symbol enrichment fits in context.
+ */
+export function formatMarketDataForPromptCompact(b: MarketDataBundle): string {
+  const p = b.profile;
+  const q = b.quote;
+  const v = b.valuation;
+  const f = b.fundamentals;
+  const t = b.trading;
+  const lines: string[] = [
+    `${p.name ?? b.ticker} (${b.ticker}) | ${p.sector ?? "—"} · ${p.industry ?? "—"}`,
+    `Mkt cap: ${fmtUsdShort(q.marketCap)} | Price: ${
+      q.currentPrice != null ? `$${fmtNum(q.currentPrice, 2)}` : "N/A"
+    } | Chg: ${fmtNum(q.change, 2)} (${fmtPctRatio((q.changePercent ?? 0) / 100)})`,
+    `Trailing P/E: ${fmtNum(v.trailingPE)} | Fwd P/E: ${fmtNum(v.forwardPE)} | PEG: ${fmtNum(
+      v.peg,
+    )} | P/B: ${fmtNum(v.priceToBook)} | P/S: ${fmtNum(v.priceToSales)}`,
+    `EV/Revenue: ${fmtNum(v.evToRevenue)} | EV/EBITDA: ${fmtNum(v.evToEbitda)}`,
+    `Revenue (reported): ${fmtUsdShort(f.revenue)} | EBITDA: ${fmtUsdShort(
+      f.ebitda,
+    )} | Net income: ${fmtUsdShort(f.netIncome)}`,
+    `Gross margin: ${fmtPctRatio(f.grossMargin)} | Operating margin: ${fmtPctRatio(
+      f.operatingMargin,
+    )} | Net margin: ${fmtPctRatio(f.profitMargin)}`,
+    `Revenue growth YoY: ${fmtPctRatio(f.revenueGrowth)} | Earnings growth: ${fmtPctRatio(
+      f.earningsGrowth,
+    )} | ROE: ${fmtPctRatio(f.roe)} | ROA: ${fmtPctRatio(f.roa)}`,
+    `Beta: ${fmtNum(t.beta)} | 52w: $${fmtNum(t.fiftyTwoWeekLow, 2)} – $${fmtNum(
+      t.fiftyTwoWeekHigh,
+      2,
+    )} | Analyst target (mean): $${fmtNum(t.targetMean, 2)}`,
+  ];
+  if (b.errors.length) {
+    lines.push(`Partial data warnings: ${b.errors.join("; ")}`);
+  }
+  return lines.join("\n");
+}
+
 export function bundleHasDisplayableData(b: MarketDataBundle): boolean {
   return Boolean(
     b.quote.currentPrice != null ||

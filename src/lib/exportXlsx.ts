@@ -132,7 +132,7 @@ function appendSectionRows(
 
 export async function buildXlsxBuffer(payload: ExportPayload): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
-  wb.creator = "FinPrompt";
+  wb.creator = "Meridian";
 
   const analysis = wb.addWorksheet("Analysis");
   let row = 1;

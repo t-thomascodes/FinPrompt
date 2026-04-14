@@ -20,7 +20,7 @@ export function OutputRenderer({
 }: {
   text: string;
   accent: string;
-  /** When false, section accents are neutral (operations / data workflows). */
+  /** When false, section accents are neutral (non-research workflows). */
   researchMode?: boolean;
 }) {
   if (!text) return null;
@@ -314,6 +314,13 @@ function SectionBlock({ s, accent }: { s: ParsedSection; accent: string }) {
           </div>
         );
       }
+      if (s.headingLevel === 4) {
+        return (
+          <div className="mt-3 font-sans text-sm font-semibold tracking-tight text-fp-text-primary">
+            {s.content}
+          </div>
+        );
+      }
       return (
         <div className="mt-4 font-sans text-lg font-medium text-fp-text-primary">
           {s.content}
@@ -390,16 +397,18 @@ function SectionBlock({ s, accent }: { s: ParsedSection; accent: string }) {
   }
 }
 
+/** Inline emphasis: treat `***x***` like `**x**`; not a full Markdown engine. */
 function InlineMd({ text }: { text: string }) {
-  const parts = text.split(/(\*\*.+?\*\*)/g);
+  const normalized = text.replace(/\*\*\*(.+?)\*\*\*/g, "**$1**");
+  const parts = normalized.split(/(\*\*.+?\*\*)/g);
   return (
     <>
       {parts.map((p, i) => {
-        const m = p.match(/^\*\*(.+?)\*\*$/);
-        if (m) {
+        const dub = p.match(/^\*\*(.+?)\*\*$/);
+        if (dub) {
           return (
             <strong key={i} className="font-medium text-fp-text-primary">
-              {m[1]}
+              {dub[1]}
             </strong>
           );
         }

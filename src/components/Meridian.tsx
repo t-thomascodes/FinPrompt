@@ -1,6 +1,6 @@
 "use client";
 
-import { useFinPrompt } from "@/context/FinPromptContext";
+import { useMeridian } from "@/context/MeridianContext";
 import { Analytics } from "@/components/Analytics";
 import { Header } from "@/components/Header";
 import { LogDetail } from "@/components/LogDetail";
@@ -10,7 +10,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { WorkflowConfig } from "@/components/WorkflowConfig";
 import { WorkflowHistory } from "@/components/WorkflowHistory";
 
-export function FinPrompt() {
+export function Meridian() {
   const {
     view,
     selectedPrompt,
@@ -20,7 +20,7 @@ export function FinPrompt() {
     logs,
     dataHydrated,
     persistenceEnabled,
-  } = useFinPrompt();
+  } = useMeridian();
 
   const workflowCount = categories.reduce((s, c) => s + c.prompts.length, 0);
   const liveCount = categories.filter((c) =>
@@ -50,14 +50,14 @@ export function FinPrompt() {
                 {workflowCount} workflows · {liveCount} with live data enrichment
                 {persistenceEnabled ? " · synced to database" : ""}
               </p>
-              {!config.openaiConfigured ? (
+              {!config.workflowsReady ? (
                 <div className="mt-1.5 max-w-sm rounded-fp-card border-[0.5px] border-fp-border bg-fp-surface-secondary p-3 text-center shadow-fp-card">
                   <div className="mb-1 text-[11px] font-semibold text-fp-data">
-                    Configure OpenAI
+                    Server not ready
                   </div>
                   <p className="text-[10px] leading-relaxed text-fp-text-dim">
-                    Set OPENAI_API_KEY in .env.local and restart the dev server
-                    to run workflows.
+                    Workflow runs require server configuration. Ask your admin or
+                    check environment setup, then restart the app.
                   </p>
                 </div>
               ) : null}
@@ -101,10 +101,9 @@ export function FinPrompt() {
                     Workflow runs
                   </h2>
                   <p className="mt-1 text-xs text-fp-text-dim">
-                    Runs grouped by the same prompt template (e.g. one workflow
-                    reused with different tickers). Workflow types are shown as
-                    tags. Open a run for full output, the prompt sent, ratings,
-                    and market metadata.
+                    Grouped under Equity research, Risk and compliance, and Fund operations,
+                    then workflow name and prompt template version, then each run. Open a run
+                    for the filled prompt, output, and metadata.
                   </p>
                 </div>
                 <span className="font-mono text-[11px] text-fp-text-ghost">
