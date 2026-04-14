@@ -3,6 +3,7 @@
 import type { CSSProperties } from "react";
 import { useMemo, useState } from "react";
 import { useMeridian } from "@/context/MeridianContext";
+import { HIDDEN_WORKFLOW_IDS } from "@/lib/hiddenWorkflowIds";
 import { isForkedPromptId } from "@/lib/promptFork";
 import type { PromptTemplate } from "@/lib/types";
 
@@ -107,7 +108,9 @@ export function Sidebar() {
   const category = categories.find((c) => c.id === activeCategory);
 
   const { standardPrompts, customPrompts } = useMemo(() => {
-    const prompts = category?.prompts ?? [];
+    const prompts = (category?.prompts ?? []).filter(
+      (p) => !HIDDEN_WORKFLOW_IDS.has(p.id),
+    );
     const standard: PromptTemplate[] = [];
     const custom: PromptTemplate[] = [];
     for (const p of prompts) {
