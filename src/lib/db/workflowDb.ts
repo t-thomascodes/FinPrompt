@@ -94,25 +94,42 @@ export function rowToWorkflowLog(row: WorkflowLogRow): WorkflowLog {
  * three demo seed logs (HTTP 200), which looks like 'only my first three runs' after refresh.
  */
 const APP_STATE_LIST_OUTPUT_MAX_CHARS = 3200;
+const APP_STATE_LIST_INPUTS_MAX_CHARS = 3200;
+const APP_STATE_LIST_VARIABLE_KEYS_MAX = 64;
+const APP_STATE_LIST_VARIABLE_VALUE_MAX_CHARS = 800;
+
+function previewChars(raw: string, max: number): string {
+  const s = raw ?? "";
+  if (s.length <= max) return s;
+  return s.slice(0, max);
+}
 
 function outputPreviewForAppState(raw: string): string {
-  const s = raw ?? "";
-  if (s.length <= APP_STATE_LIST_OUTPUT_MAX_CHARS) return s;
-  return s.slice(0, APP_STATE_LIST_OUTPUT_MAX_CHARS);
+  return previewChars(raw, APP_STATE_LIST_OUTPUT_MAX_CHARS);
+}
+
+function variablesPreviewForAppState(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  let n = 0;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (n >= APP_STATE_LIST_VARIABLE_KEYS_MAX) break;
+    const s =
+      typeof v === "string" ? v : v == null ? "" : JSON.stringify(v);
+    out[k] = previewChars(s, APP_STATE_LIST_VARIABLE_VALUE_MAX_CHARS);
+    n++;
+  }
+  return out;
 }
 
 export function rowToWorkflowLogList(row: WorkflowLogListRow): WorkflowLog {
-  const vars = row.variables;
   return {
     id: row.id,
     promptId: row.prompt_id,
     promptTitle: row.prompt_title,
     categoryId: row.category_id,
-    inputs: row.inputs,
-    variables:
-      vars && typeof vars === "object" && !Array.isArray(vars)
-        ? (vars as Record<string, string>)
-        : {},
+    inputs: previewChars(row.inputs ?? "", APP_STATE_LIST_INPUTS_MAX_CHARS),
+    variables: variablesPreviewForAppState(row.variables),
     output: outputPreviewForAppState(row.output ?? ""),
     marketData: "",
     hadData: Boolean(row.had_data),

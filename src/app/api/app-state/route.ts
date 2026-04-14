@@ -9,6 +9,7 @@ import {
 import { SEED_LOGS } from "@/lib/seedLogs";
 import { getSupabaseAdmin } from "@/lib/supabase/adminClient";
 import { formatSupabaseError } from "@/lib/supabase/errors";
+import type { WorkflowLog } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -47,7 +48,8 @@ export async function GET() {
     }
 
     let categories = structuredClone(INITIAL_CATEGORIES);
-    let logs = structuredClone(SEED_LOGS);
+    /** Empty until load succeeds — avoids showing SEED_LOGS on load error while persistence is still "supabase". */
+    let logs: WorkflowLog[] = [];
     let variantLabels: Record<string, string> = {};
     let partialWarning: string | undefined;
 
@@ -66,7 +68,7 @@ export async function GET() {
       console.error("[Meridian] app-state loadLogsListForAppState:", msg, logErr);
       partialWarning =
         (partialWarning ? `${partialWarning} ` : "") +
-        "Workflow logs could not be loaded; using demo logs until the error is fixed.";
+        "Workflow logs could not be loaded from the database; history may appear empty until this is fixed.";
     }
 
     try {
