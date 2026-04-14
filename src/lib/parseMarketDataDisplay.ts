@@ -1,4 +1,6 @@
-/** Parse FinPrompt / Alpha Vantage formatted market blocks into UI-friendly fields. */
+/** Parse FinPrompt market blocks into UI-friendly fields. */
+
+import type { MarketDataBundle } from "@/lib/marketDataTypes";
 
 export type MarketNewsItem = {
   title: string;
@@ -226,4 +228,78 @@ export function sentimentTone(label: string): SentimentTone {
   if (/\bbear/.test(t)) return "bear";
   if (/\bbull/.test(t)) return "bull";
   return "mid";
+}
+
+function fmtCap(n: number | null | undefined): string | undefined {
+  if (n == null || Number.isNaN(n)) return undefined;
+  const abs = Math.abs(n);
+  if (abs >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+/** Build the metrics header model from normalized Yahoo bundle (preferred when available). */
+export function marketDisplayFromBundle(b: MarketDataBundle): ParsedMarketDisplay | null {
+  const has =
+    b.quote.currentPrice != null ||
+    Boolean(b.profile.name) ||
+    b.quarters.length > 0 ||
+    b.priceHistory.length > 0;
+  if (!has) return null;
+
+  const q = b.quote;
+  const p = b.profile;
+  const v = b.valuation;
+  const f = b.fundamentals;
+  const t = b.trading;
+  const chg = q.change;
+
+  return {
+    name: p.name ?? undefined,
+    symbol: b.ticker,
+    sectorLine: [p.sector, p.industry].filter(Boolean).join(" · ") || undefined,
+    price: q.currentPrice != null ? q.currentPrice.toFixed(2) : undefined,
+    change: chg != null ? chg.toFixed(2) : undefined,
+    changePercent:
+      q.changePercent != null ? `${q.changePercent.toFixed(2)}%` : undefined,
+    isUp: chg != null ? chg >= 0 : null,
+    volume: q.volume != null ? String(q.volume) : undefined,
+    open: q.dayOpen != null ? q.dayOpen.toFixed(2) : undefined,
+    high: q.dayHigh != null ? q.dayHigh.toFixed(2) : undefined,
+    low: q.dayLow != null ? q.dayLow.toFixed(2) : undefined,
+    pe: v.trailingPE != null ? v.trailingPE.toFixed(2) : undefined,
+    forwardPe: v.forwardPE != null ? v.forwardPE.toFixed(2) : undefined,
+    peg: v.peg != null ? v.peg.toFixed(2) : undefined,
+    marketCap: fmtCap(q.marketCap),
+    enterpriseValue: undefined,
+    beta: t.beta != null ? t.beta.toFixed(2) : undefined,
+    weekLow: t.fiftyTwoWeekLow != null ? t.fiftyTwoWeekLow.toFixed(2) : undefined,
+    weekHigh: t.fiftyTwoWeekHigh != null ? t.fiftyTwoWeekHigh.toFixed(2) : undefined,
+    target: t.targetMean != null ? t.targetMean.toFixed(2) : undefined,
+    divYield: undefined,
+    revenueTtm: f.revenue != null ? fmtCap(f.revenue) : undefined,
+    ebitda: f.ebitda != null ? fmtCap(f.ebitda) : undefined,
+    grossMargin:
+      f.grossMargin != null
+        ? `${(Math.abs(f.grossMargin) <= 1 ? f.grossMargin * 100 : f.grossMargin).toFixed(2)}%`
+        : undefined,
+    opMargin:
+      f.operatingMargin != null
+        ? `${(Math.abs(f.operatingMargin) <= 1 ? f.operatingMargin * 100 : f.operatingMargin).toFixed(2)}%`
+        : undefined,
+    roe:
+      f.roe != null
+        ? `${(Math.abs(f.roe) <= 1 ? f.roe * 100 : f.roe).toFixed(2)}%`
+        : undefined,
+    revGrowth:
+      f.revenueGrowth != null
+        ? `${(Math.abs(f.revenueGrowth) <= 1 ? f.revenueGrowth * 100 : f.revenueGrowth).toFixed(2)}%`
+        : undefined,
+    news: b.news.map((n) => ({
+      title: n.title,
+      source: n.publisher,
+      sentiment: "N/A",
+    })),
+  };
 }

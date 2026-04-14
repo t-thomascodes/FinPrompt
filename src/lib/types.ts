@@ -1,3 +1,5 @@
+import type { MarketDataBundle } from "@/lib/marketDataTypes";
+
 export interface Category {
   id: string;
   label: string;
@@ -22,7 +24,7 @@ export interface Variable {
 }
 
 export interface WorkflowLog {
-  id: number;
+  id: string;
   promptId: string;
   promptTitle: string;
   categoryId: string;
@@ -34,23 +36,14 @@ export interface WorkflowLog {
   timestamp: string;
   rating: number;
   fullPrompt: string;
-}
-
-export interface MarketDataResult {
-  quote: Record<string, string> | null;
-  overview: Record<string, string> | null;
-  news: Array<{
-    title: string;
-    source: string;
-    overall_sentiment_label: string;
-  }>;
-  formatted: string;
+  marketDataStructured?: MarketDataBundle | null;
 }
 
 export interface ExportPayload {
   title: string;
   output: string;
   marketData?: string;
+  marketDataStructured?: MarketDataBundle | null;
   category: string;
   inputs: string;
   timestamp: string;
@@ -62,6 +55,13 @@ export interface ExecuteRequestBody {
   template: string;
   variables: Record<string, string>;
   enrichTicker?: string;
+  /** Persisted to Supabase when configured */
+  logMeta?: {
+    promptId: string;
+    promptTitle: string;
+    categoryId: string;
+    inputs: string;
+  };
 }
 
 export interface ExecuteResponseBody {
@@ -69,6 +69,14 @@ export interface ExecuteResponseBody {
   marketData: string;
   hadData: boolean;
   fullPrompt: string;
+  marketDataStructured: MarketDataBundle | null;
+  /** Populated when the run is stored in Supabase */
+  logId?: string | null;
+  /**
+   * When Supabase is configured and saving was attempted but failed (e.g. DB error).
+   * The client still shows the run, but it will not appear after refresh.
+   */
+  logSaveError?: string | null;
 }
 
 export type ExportRequestBody = ExportPayload & {

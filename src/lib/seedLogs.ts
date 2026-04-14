@@ -2,7 +2,7 @@ import type { WorkflowLog } from "@/lib/types";
 
 export const SEED_LOGS: WorkflowLog[] = [
   {
-    id: 1001,
+    id: "seed-1001",
     promptId: "bull-bear",
     promptTitle: "Bull/Bear Case Generator",
     categoryId: "research",
@@ -41,7 +41,7 @@ The market is pricing in sustained 50%+ revenue growth through 2027 and gradual 
     fullPrompt: "[full prompt text]",
   },
   {
-    id: 1002,
+    id: "seed-1002",
     promptId: "earnings-prep",
     promptTitle: "Earnings Call Prep",
     categoryId: "research",
@@ -73,7 +73,7 @@ Last quarter, Tim Cook stated the Apple Intelligence rollout was "ahead of inter
     fullPrompt: "[full prompt text]",
   },
   {
-    id: 1003,
+    id: "seed-1003",
     promptId: "risk-assessment",
     promptTitle: "Position Risk Assessment",
     categoryId: "risk",
@@ -108,7 +108,7 @@ TSLA correlates with the broader tech/growth basket but has significant idiosync
     fullPrompt: "[full prompt text]",
   },
   {
-    id: 1004,
+    id: "seed-1004",
     promptId: "investor-update",
     promptTitle: "Investor Letter Draft",
     categoryId: "operations",
@@ -153,7 +153,7 @@ The Investment Team`,
     fullPrompt: "[full prompt text]",
   },
   {
-    id: 1005,
+    id: "seed-1005",
     promptId: "bull-bear",
     promptTitle: "Bull/Bear Case Generator",
     categoryId: "research",
@@ -190,7 +190,7 @@ Market prices META as a mature ad platform growing 15-18% with an expensive hobb
     fullPrompt: "[full prompt text]",
   },
   {
-    id: 1006,
+    id: "seed-1006",
     promptId: "process-automation",
     promptTitle: "Process Automation Spec",
     categoryId: "operations",
@@ -233,7 +233,7 @@ For break classification LLM step:
     fullPrompt: "[full prompt text]",
   },
   {
-    id: 1007,
+    id: "seed-1007",
     promptId: "comp-analysis",
     promptTitle: "Comparable Company Screen",
     categoryId: "research",
@@ -267,7 +267,7 @@ Columns: Ticker, EV/NTM Rev, Rev Growth %, Gross Margin %, Op Margin %, FCF Marg
     fullPrompt: "[full prompt text]",
   },
   {
-    id: 1008,
+    id: "seed-1008",
     promptId: "sql-query",
     promptTitle: "SQL Query Builder",
     categoryId: "data",
@@ -349,7 +349,7 @@ FROM ranked WHERE rn <= 3 ORDER BY sector, rn;
     fullPrompt: "[full prompt text]",
   },
   {
-    id: 1009,
+    id: "seed-1009",
     promptId: "compliance-check",
     promptTitle: "Compliance Pre-Trade Check",
     categoryId: "risk",
@@ -390,7 +390,7 @@ Pre-trade: investment thesis memo, compliance sign-off, restricted list check (t
     fullPrompt: "[full prompt text]",
   },
   {
-    id: 1010,
+    id: "seed-1010",
     promptId: "dataset-explore",
     promptTitle: "Dataset Explorer",
     categoryId: "data",

@@ -3,18 +3,7 @@
 import { useFinPrompt } from "@/context/FinPromptContext";
 
 export function Header() {
-  const {
-    view,
-    setView,
-    logs,
-    setViewingLog,
-    showSettings,
-    setShowSettings,
-    config,
-  } = useFinPrompt();
-
-  const openaiOk = config.openaiConfigured;
-  const avOk = config.alphaVantageConfigured;
+  const { view, setView, logs, setViewingLog } = useFinPrompt();
 
   return (
     <header className="flex shrink-0 flex-col gap-3 border-b-[0.5px] border-fp-border bg-fp-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -36,6 +25,7 @@ export function Header() {
           [
             { id: "workflows" as const, label: "Workflows" },
             { id: "logs" as const, label: `Logs (${logs.length})` },
+            { id: "workflowHistory" as const, label: "By workflow" },
             { id: "analytics" as const, label: "Analytics" },
           ] as const
         ).map((tab) => (
@@ -55,28 +45,6 @@ export function Header() {
             {tab.label}
           </button>
         ))}
-        <div className="mx-1.5 h-5 w-px bg-fp-border" />
-        <button
-          type="button"
-          onClick={() => setShowSettings(!showSettings)}
-          className={`rounded-fp-btn border-[0.5px] border-fp-border px-3 py-1.5 font-mono text-xs transition-colors ${
-            showSettings ? "bg-fp-surface-secondary" : "bg-fp-surface"
-          } ${
-            openaiOk && avOk
-              ? "text-fp-research"
-              : "text-fp-text-muted hover:text-fp-text-secondary"
-          }`}
-          aria-expanded={showSettings}
-        >
-          {"\u2699"}
-        </button>
-        <span
-          className="h-2 w-2 shrink-0 rounded-full"
-          style={{
-            background: openaiOk ? "#0F6E56" : "#BA7517",
-          }}
-          title={openaiOk ? "OpenAI configured" : "Check API configuration"}
-        />
       </div>
     </header>
   );

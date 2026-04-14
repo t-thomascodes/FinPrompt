@@ -2,7 +2,10 @@ import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { enrichTickerData } from "@/lib/marketData";
 import { fillTemplate } from "@/lib/template";
+import { insertWorkflowLog } from "@/lib/db/workflowDb";
 import type { ExecuteRequestBody, ExecuteResponseBody } from "@/lib/types";
+import type { MarketDataBundle } from "@/lib/marketDataTypes";
+import { getSupabaseAdmin } from "@/lib/supabase/adminClient";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -30,20 +33,19 @@ export async function POST(req: Request) {
   }
 
   let marketData = "";
+  let marketDataStructured: MarketDataBundle | null = null;
+  let hadData = false;
   const enrich = body.enrichTicker?.trim();
   const ticker = enrich
     ? (body.variables[enrich] ?? "").trim().toUpperCase()
     : "";
 
   if (enrich && ticker) {
-    const enriched = await enrichTickerData(ticker, process.env.ALPHA_VANTAGE_API_KEY);
+    const enriched = await enrichTickerData(ticker);
     marketData = enriched.formatted;
+    marketDataStructured = enriched.structured;
+    hadData = enriched.hadData;
   }
-
-  const hadData =
-    Boolean(enrich && ticker && process.env.ALPHA_VANTAGE_API_KEY) &&
-    marketData.includes("---") &&
-    !marketData.startsWith("[");
 
   const fullPrompt = fillTemplate(body.template, {
     ...body.variables,
@@ -65,11 +67,37 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
+  let logId: string | null = null;
+  let logSaveError: string | null = null;
+  const meta = body.logMeta;
+  const supabase = getSupabaseAdmin();
+  if (supabase && meta?.promptId && meta.categoryId) {
+    logId = await insertWorkflowLog(supabase, {
+      promptId: meta.promptId,
+      promptTitle: meta.promptTitle,
+      categoryId: meta.categoryId,
+      inputs: meta.inputs,
+      variables: body.variables,
+      output: output || "No response.",
+      marketData,
+      marketDataStructured,
+      hadData,
+      fullPrompt,
+    });
+    if (!logId) {
+      logSaveError =
+        "This run was not saved to the database and will disappear after refresh. Check the server log for details.";
+    }
+  }
+
   const res: ExecuteResponseBody = {
     output: output || "No response.",
     marketData,
     hadData,
     fullPrompt,
+    marketDataStructured,
+    logId,
+    logSaveError,
   };
   return NextResponse.json(res);
 }

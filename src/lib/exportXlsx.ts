@@ -187,6 +187,46 @@ export async function buildXlsxBuffer(payload: ExportPayload): Promise<Buffer> {
     md.getColumn(3).width = 22;
   }
 
+  const mds = payload.marketDataStructured;
+  if (mds?.quarters?.length) {
+    const fq = wb.addWorksheet("Quarterly financials");
+    const hdr = [
+      "Period end",
+      "Revenue",
+      "Net income",
+      "Op margin",
+      "EPS actual",
+      "EPS estimate",
+      "Surprise",
+    ];
+    fq.getRow(1).values = [undefined, ...hdr];
+    fq.getRow(1).eachCell({ includeEmpty: false }, (cell) => {
+      cell.font = { bold: true, name: "Arial" };
+      cell.fill = HEADER_FILL;
+    });
+    mds.quarters.forEach((q, i) => {
+      const r = fq.getRow(i + 2);
+      r.getCell(1).value = q.periodEnd;
+      r.getCell(2).value = q.revenue ?? "";
+      r.getCell(3).value = q.netIncome ?? "";
+      r.getCell(4).value = q.operatingMargin != null ? q.operatingMargin : "";
+      r.getCell(5).value = q.epsActual ?? "";
+      r.getCell(6).value = q.epsEstimate ?? "";
+      r.getCell(7).value = q.epsSurprise;
+      r.eachCell({ includeEmpty: false }, (cell) => {
+        cell.font = { name: "Arial", size: 11 };
+        if (i % 2 === 0) cell.fill = ALT_FILL;
+      });
+    });
+    fq.getColumn(1).width = 14;
+    fq.getColumn(2).width = 16;
+    fq.getColumn(3).width = 16;
+    fq.getColumn(4).width = 12;
+    fq.getColumn(5).width = 12;
+    fq.getColumn(6).width = 12;
+    fq.getColumn(7).width = 10;
+  }
+
   const meta = wb.addWorksheet("Metadata");
   const entries: [string, string][] = [
     ["Workflow", payload.title],

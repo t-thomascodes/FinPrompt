@@ -1,8 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type RefObject,
+} from "react";
 import { buildExportBasename } from "@/lib/exportFilename";
+import { downloadHybridMemoPdf } from "@/lib/downloadHybridMemoPdf";
 import type { ExportPayload } from "@/lib/types";
+import type { MarketDataBundle } from "@/lib/marketDataTypes";
 
 type Props = {
   title: string;
@@ -11,11 +18,14 @@ type Props = {
   timestamp: string;
   output: string;
   marketData: string;
+  marketStructured?: MarketDataBundle | null;
   rating?: number;
   fullPrompt?: string;
   workflowSlug: string;
   primaryInput: string;
   accent: string;
+  /** Metrics + charts region only; captured as PNG for PDF pages 1–2. */
+  dashboardCaptureRef?: RefObject<HTMLElement | null>;
   /** When true, file exports are blocked (e.g. response still in flight). Copy may still work if output exists. */
   fileExportsDisabled?: boolean;
   /** When false, bar is meant to sit in a sticky/docked footer (no extra top margin / divider). */
@@ -69,6 +79,23 @@ function IconSlides() {
   );
 }
 
+function IconPdf() {
+  return (
+    <svg
+      className="h-4 w-4 shrink-0 opacity-90"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      aria-hidden
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+      <path d="M9 15h6M9 11h6M9 19h4" />
+    </svg>
+  );
+}
+
 function IconCopy() {
   return (
     <svg
@@ -87,7 +114,7 @@ function IconCopy() {
 
 export function ExportBar(props: Props) {
   const docked = props.docked !== false;
-  const [busy, setBusy] = useState<null | "docx" | "xlsx" | "pptx">(null);
+  const [busy, setBusy] = useState<null | "docx" | "xlsx" | "pptx" | "pdf">(null);
   const [err, setErr] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -107,6 +134,7 @@ export function ExportBar(props: Props) {
       title: props.title,
       output: props.output,
       marketData: props.marketData || undefined,
+      marketDataStructured: props.marketStructured ?? undefined,
       category: props.categoryLabel,
       inputs: props.inputs,
       timestamp: props.timestamp,
@@ -171,6 +199,38 @@ export function ExportBar(props: Props) {
     },
     [downloadBlob],
   );
+
+  const downloadPdfHybrid = useCallback(async () => {
+    setErr("");
+    setBusy("pdf");
+    try {
+      await downloadHybridMemoPdf(
+        {
+          title: props.title,
+          categoryLabel: props.categoryLabel,
+          inputs: props.inputs,
+          timestamp: props.timestamp,
+          rating: props.rating,
+          filename: `${base}.pdf`,
+        },
+        props.dashboardCaptureRef?.current ?? null,
+        props.output,
+      );
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "PDF export failed");
+    } finally {
+      setBusy(null);
+    }
+  }, [
+    base,
+    props.title,
+    props.categoryLabel,
+    props.inputs,
+    props.timestamp,
+    props.rating,
+    props.output,
+    props.dashboardCaptureRef,
+  ]);
 
   const copy = useCallback(async () => {
     setErr("");
@@ -242,6 +302,18 @@ export function ExportBar(props: Props) {
         >
           <IconSlides />
           {busy === "pptx" ? "…" : "PowerPoint"}
+        </button>
+        <button
+          type="button"
+          className={btn}
+          style={accentBorder}
+          disabled={fileDisabled}
+          title="Dashboard as images; analysis as selectable text"
+          aria-busy={busy === "pdf"}
+          onClick={() => void downloadPdfHybrid()}
+        >
+          <IconPdf />
+          {busy === "pdf" ? "…" : "PDF"}
         </button>
         <button
           type="button"

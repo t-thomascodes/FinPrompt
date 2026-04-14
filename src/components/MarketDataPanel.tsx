@@ -3,16 +3,19 @@
 import { useMemo, useState } from "react";
 import {
   formatVolumeAbbrev,
+  marketDisplayFromBundle,
   parseMarketDataForDisplay,
   parsePriceNum,
   sentimentTone,
   type ParsedMarketDisplay,
 } from "@/lib/parseMarketDataDisplay";
+import type { MarketDataBundle } from "@/lib/marketDataTypes";
 
 type Props = {
   marketData: string;
   dataLoading: boolean;
   accent: string;
+  structured?: MarketDataBundle | null;
 };
 
 function WeekRangeBar({
@@ -153,12 +156,19 @@ function NewsPanel({
   );
 }
 
-export function MarketDataPanel({ marketData, dataLoading, accent }: Props) {
+export function MarketDataPanel({
+  marketData,
+  dataLoading,
+  accent,
+  structured,
+}: Props) {
   const [showRaw, setShowRaw] = useState(false);
-  const parsed = useMemo(
-    () => parseMarketDataForDisplay(marketData),
-    [marketData],
-  );
+  const parsed = useMemo(() => {
+    if (structured) {
+      return marketDisplayFromBundle(structured);
+    }
+    return parseMarketDataForDisplay(marketData);
+  }, [structured, marketData]);
 
   if (!marketData && !dataLoading) return null;
 
@@ -177,7 +187,7 @@ export function MarketDataPanel({ marketData, dataLoading, accent }: Props) {
 
   return (
     <div
-      className="mb-5 rounded-fp-card border-[0.5px] border-fp-border bg-fp-surface shadow-fp-card"
+      className="mb-3 rounded-fp-card border-[0.5px] border-fp-border bg-fp-surface shadow-fp-card"
       aria-busy={dataLoading}
     >
       <div className="border-b-[0.5px] border-fp-border px-4 py-3 sm:px-5">

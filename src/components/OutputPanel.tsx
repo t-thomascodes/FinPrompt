@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useFinPrompt } from "@/context/FinPromptContext";
 import { resolvePrimaryInput } from "@/lib/exportFilename";
 import { MarketDataPanel } from "@/components/MarketDataPanel";
+import { MarketCharts } from "@/components/MarketCharts";
 import { ExportBar } from "@/components/ExportBar";
 import { OutputRenderer } from "@/components/OutputRenderer";
 
@@ -16,16 +17,19 @@ export function OutputPanel() {
     typingDone,
     loading,
     error,
+    logSyncWarning,
     marketData,
+    marketStructured,
     dataLoading,
     variables,
     logs,
   } = useFinPrompt();
 
-  const ref = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const dashboardPdfRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const el = ref.current;
+    const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [displayedText]);
@@ -54,14 +58,34 @@ export function OutputPanel() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-fp-bg">
       <div
-        ref={ref}
+        ref={scrollRef}
         className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5"
       >
-        <MarketDataPanel
-          marketData={marketData}
-          dataLoading={dataLoading}
-          accent={color}
-        />
+        <div ref={dashboardPdfRef}>
+          <MarketDataPanel
+            marketData={marketData}
+            dataLoading={dataLoading}
+            accent={color}
+            structured={marketStructured}
+          />
+
+          {marketStructured && selectedPrompt.enrichTicker ? (
+            <MarketCharts
+              bundle={marketStructured}
+              workflowId={selectedPrompt.id}
+              accent={color}
+            />
+          ) : null}
+        </div>
+
+        {logSyncWarning ? (
+          <div
+            className="mb-3 rounded-fp-card border-[0.5px] border-amber-500/35 bg-amber-500/10 p-3.5 font-mono text-xs text-amber-900 dark:text-amber-100"
+            role="status"
+          >
+            {logSyncWarning}
+          </div>
+        ) : null}
 
         {error ? (
           <div
@@ -147,11 +171,13 @@ export function OutputPanel() {
             timestamp={exportTimestamp}
             output={output}
             marketData={marketData}
+            marketStructured={marketStructured ?? undefined}
             rating={logMatches ? latestLog.rating : undefined}
             fullPrompt={fullPromptForExport}
             workflowSlug={selectedPrompt.id}
             primaryInput={primary}
             accent={color}
+            dashboardCaptureRef={dashboardPdfRef}
             fileExportsDisabled={loading}
           />
         </div>

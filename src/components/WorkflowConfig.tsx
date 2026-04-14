@@ -18,7 +18,6 @@ export function WorkflowConfig() {
     handleRun,
     loading,
     dataLoading,
-    config,
   } = useFinPrompt();
 
   if (!selectedPrompt || !activeCategoryObj) return null;
@@ -26,7 +25,6 @@ export function WorkflowConfig() {
   const color = activeCategoryObj.color;
   const missingVars = selectedPrompt.variables.some((v) => !variables[v.key]);
   const disabled = loading || dataLoading || missingVars;
-  const liveReady = !selectedPrompt.enrichTicker || config.alphaVantageConfigured;
 
   return (
     <div className="shrink-0 border-b-[0.5px] border-fp-border bg-fp-surface px-4 py-4 sm:px-6 sm:py-[18px]">
@@ -40,11 +38,11 @@ export function WorkflowConfig() {
               <span
                 className="rounded-fp-badge px-1.5 py-0.5 font-mono text-[9px] font-semibold"
                 style={{
-                  background: liveReady ? "#E1F5EE" : "#FAECE7",
-                  color: liveReady ? "#0F6E56" : "#993C1D",
+                  background: "#E1F5EE",
+                  color: "#0F6E56",
                 }}
               >
-                {liveReady ? "\u25C9 LIVE" : "\u25CB NO KEY"}
+                {"\u25C9 LIVE"}
               </span>
             ) : null}
           </div>
@@ -158,9 +156,7 @@ export function WorkflowConfig() {
         </button>
         {selectedPrompt.enrichTicker ? (
           <span className="text-[10px] text-fp-text-muted">
-            {config.alphaVantageConfigured
-              ? "Data → Enrich → Execute → Log"
-              : "Add ALPHA_VANTAGE_API_KEY for data enrichment"}
+            Yahoo Finance data → Enrich → Execute → Log
           </span>
         ) : null}
       </div>
