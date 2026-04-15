@@ -340,6 +340,49 @@ const APP_STATE_LOG_COLUMNS_BASE =
 
 const APP_STATE_LOG_COLUMNS_FULL = `${APP_STATE_LOG_COLUMNS_BASE},full_prompt_fingerprint,full_prompt_excerpt`;
 
+/** Prefer migration 011 excerpts so PostgREST never ships multi‑MB `output`/`inputs` per row for lists. */
+const APP_STATE_LOG_SLIM =
+  "id,prompt_id,prompt_title,category_id,inputs_list_excerpt,variables,output_list_excerpt,had_data,rating,created_at";
+
+const APP_STATE_LOG_SLIM_VARIANT = `${APP_STATE_LOG_SLIM},full_prompt_fingerprint,full_prompt_excerpt`;
+
+function isMissingListExcerptColumnsError(err: { message?: string; code?: string }): boolean {
+  const m = (err.message ?? "").toLowerCase();
+  return (
+    m.includes("inputs_list_excerpt") ||
+    m.includes("output_list_excerpt") ||
+    (m.includes("list_excerpt") && m.includes("does not exist"))
+  );
+}
+
+function normalizeAppStateLogRow(row: unknown): WorkflowLogListRow {
+  const r = row as Record<string, unknown>;
+  const inputs =
+    typeof r.inputs_list_excerpt === "string"
+      ? r.inputs_list_excerpt
+      : String(r.inputs ?? "");
+  const output =
+    typeof r.output_list_excerpt === "string"
+      ? r.output_list_excerpt
+      : String(r.output ?? "");
+  return {
+    id: String(r.id ?? ""),
+    prompt_id: String(r.prompt_id ?? ""),
+    prompt_title: String(r.prompt_title ?? ""),
+    category_id: String(r.category_id ?? ""),
+    inputs,
+    variables: r.variables,
+    output,
+    had_data: Boolean(r.had_data),
+    rating: Number(r.rating ?? 0),
+    created_at: String(r.created_at ?? ""),
+    full_prompt_fingerprint:
+      typeof r.full_prompt_fingerprint === "string" ? r.full_prompt_fingerprint : undefined,
+    full_prompt_excerpt:
+      typeof r.full_prompt_excerpt === "string" ? r.full_prompt_excerpt : undefined,
+  };
+}
+
 function isMissingFingerprintColumnsError(err: { message?: string; code?: string }): boolean {
   const code = String(err.code ?? "");
   if (code === "42703") return true;
@@ -370,9 +413,18 @@ export async function loadLogsListForAppState(
       .order("created_at", { ascending: false })
       .limit(300);
 
-  let { data, error, count } = await runSelect(APP_STATE_LOG_COLUMNS_FULL);
+  let { data, error, count } = await runSelect(APP_STATE_LOG_SLIM_VARIANT);
+  let usedListExcerpts = true;
+  if (error && isMissingListExcerptColumnsError(error)) {
+    usedListExcerpts = false;
+    ({ data, error, count } = await runSelect(APP_STATE_LOG_COLUMNS_FULL));
+  }
   if (error && isMissingFingerprintColumnsError(error)) {
-    ({ data, error, count } = await runSelect(APP_STATE_LOG_COLUMNS_BASE));
+    if (usedListExcerpts) {
+      ({ data, error, count } = await runSelect(APP_STATE_LOG_SLIM));
+    } else {
+      ({ data, error, count } = await runSelect(APP_STATE_LOG_COLUMNS_BASE));
+    }
   }
   if (error) throw error;
   const rows = data ?? [];
@@ -387,7 +439,11 @@ export async function loadLogsListForAppState(
     );
   }
   return rows.map((row) =>
-    rowToWorkflowLogList(row as unknown as WorkflowLogListRow),
+    rowToWorkflowLogList(
+      usedListExcerpts
+        ? normalizeAppStateLogRow(row)
+        : (row as unknown as WorkflowLogListRow),
+    ),
   );
 }
 

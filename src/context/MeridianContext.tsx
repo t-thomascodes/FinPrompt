@@ -206,15 +206,13 @@ export function MeridianProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const seq = ++hydrateSeq.current;
-    const ac = new AbortController();
     void (async () => {
       let finishedHydration = false;
       try {
         await refreshConfig();
-        const r = await fetch(appStateUrl(), {
-          ...APP_STATE_FETCH_BASE,
-          signal: ac.signal,
-        });
+        // Do not pass AbortSignal here: React Strict Mode runs mount → cleanup → mount in dev; aborting
+        // the first in-flight fetch guarantees it never completes, so a flaky second fetch leaves logs empty.
+        const r = await fetch(appStateUrl(), APP_STATE_FETCH_BASE);
         let d: {
           persistence?: string;
           categories?: Category[];
@@ -280,9 +278,6 @@ export function MeridianProvider({ children }: { children: React.ReactNode }) {
         hydrateSucceeded.current = true;
         finishedHydration = true;
       } catch (e) {
-        if (e instanceof DOMException && e.name === "AbortError") return;
-        const err = e as { name?: string };
-        if (err?.name === "AbortError") return;
         if (seq !== hydrateSeq.current) return;
         if (hydrateSucceeded.current) {
           console.warn(
@@ -380,7 +375,6 @@ export function MeridianProvider({ children }: { children: React.ReactNode }) {
         }
       }
     })();
-    return () => ac.abort();
   }, [refreshConfig]);
 
   useEffect(() => {
