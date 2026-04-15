@@ -96,9 +96,6 @@ export function Sidebar() {
     setActiveCategory,
     selectedPrompt,
     selectPrompt,
-    setSelectedPrompt,
-    setOutput,
-    setMarketData,
     setEditingPrompt,
     logs,
     renameForkedPromptTitle,
@@ -134,10 +131,6 @@ export function Sidebar() {
             type="button"
             onClick={() => {
               setActiveCategory(cat.id);
-              setSelectedPrompt(null);
-              setOutput("");
-              setMarketData("");
-              setEditingPrompt(null);
               setForkRename(null);
             }}
             className={`mb-0.5 flex w-full items-center gap-2 rounded-r-[6px] py-2 pl-2.5 pr-2 text-left text-xs transition-colors ${

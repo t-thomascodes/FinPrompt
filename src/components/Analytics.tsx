@@ -47,11 +47,27 @@ function sameLocalCalendarDay(a: Date, b: Date): boolean {
   );
 }
 
+/** First comma-separated field (same shape as logged `inputs` join). */
+function primaryInputField(inputs: string): string {
+  return inputs.trim().split(",")[0]?.trim() ?? "";
+}
+
+/**
+ * True when the first input field looks like a single symbol (not a sentence or multi-value blob).
+ * Mirrors the character set used in `parsePeerTickersFromVariable`, with a length cap so prose
+ * does not appear under "Most Analyzed Tickers".
+ */
+function isLikelyTickerSymbol(field: string): boolean {
+  const compact = field.toUpperCase().replace(/\s+/g, "");
+  if (compact.length < 1 || compact.length > 15) return false;
+  if (!/[A-Z]/.test(compact)) return false;
+  return /^[A-Z0-9.-]+$/.test(compact);
+}
+
 function tickerLabel(inputs: string): string {
-  const t = inputs.trim();
-  if (!t) return "—";
-  const first = t.split(",")[0]?.trim().toUpperCase();
-  return first && first.length > 0 ? first : "—";
+  const field = primaryInputField(inputs);
+  if (!field || !isLikelyTickerSymbol(field)) return "—";
+  return field.toUpperCase().replace(/\s+/g, "");
 }
 
 function formatActivityTime(log: WorkflowLog): string {
@@ -267,7 +283,9 @@ function buildAnalytics(logs: WorkflowLog[], categories: Category[]): AnalyticsM
 
   const tickerCounts = new Map<string, number>();
   for (const l of logs) {
-    const k = tickerLabel(l.inputs);
+    const field = primaryInputField(l.inputs);
+    if (!isLikelyTickerSymbol(field)) continue;
+    const k = field.toUpperCase().replace(/\s+/g, "");
     tickerCounts.set(k, (tickerCounts.get(k) ?? 0) + 1);
   }
   const topTickers = Array.from(tickerCounts.entries())

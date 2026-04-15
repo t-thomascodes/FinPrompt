@@ -114,6 +114,16 @@ const APP_STATE_FETCH_BASE: Pick<RequestInit, "cache" | "headers"> = {
 const PERSISTED_LOG_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/** In-memory draft per workflow id (variables + last run output); survives view / workflow switches until refresh. */
+type WorkflowDraft = {
+  variables: Record<string, string>;
+  output: string;
+  marketData: string;
+  marketStructured: MarketDataBundle | null;
+  error: string;
+  logSyncWarning: string;
+};
+
 function readStoredView(): AppView | null {
   try {
     const s = sessionStorage.getItem(VIEW_STORAGE_KEY);
@@ -133,7 +143,7 @@ function readStoredView(): AppView | null {
 export function MeridianProvider({ children }: { children: React.ReactNode }) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [view, setViewState] = useState<AppView>("workflows");
-  const [activeCategory, setActiveCategory] = useState("research");
+  const [activeCategory, setActiveCategoryState] = useState("research");
   const [selectedPrompt, setSelectedPrompt] = useState<PromptTemplate | null>(
     null,
   );
@@ -164,6 +174,8 @@ export function MeridianProvider({ children }: { children: React.ReactNode }) {
   const [typingDone, setTypingDone] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** When true, the next `output` update shows in full immediately (draft restore), not the typewriter effect. */
+  const skipOutputTypingOnceRef = useRef(false);
   /** Latest /api/config flag — hydrate error paths use this so we never show demo logs when the server expects Supabase. */
   const supabaseConfiguredRef = useRef(false);
 
@@ -379,6 +391,17 @@ export function MeridianProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
+    if (skipOutputTypingOnceRef.current) {
+      skipOutputTypingOnceRef.current = false;
+      if (!output) {
+        setDisplayedText("");
+        setTypingDone(false);
+        return;
+      }
+      setDisplayedText(output);
+      setTypingDone(true);
+      return;
+    }
     setDisplayedText("");
     setTypingDone(false);
     if (!output) return;
@@ -399,21 +422,91 @@ export function MeridianProvider({ children }: { children: React.ReactNode }) {
     };
   }, [output]);
 
+  const draftCacheRef = useRef(new Map<string, WorkflowDraft>());
+  const sessionSnapRef = useRef<WorkflowDraft>({
+    variables: {},
+    output: "",
+    marketData: "",
+    marketStructured: null,
+    error: "",
+    logSyncWarning: "",
+  });
+  const selectedIdRef = useRef<string | null>(null);
+
+  sessionSnapRef.current = {
+    variables,
+    output,
+    marketData,
+    marketStructured,
+    error,
+    logSyncWarning,
+  };
+  selectedIdRef.current = selectedPrompt?.id ?? null;
+
+  const persistCurrentDraft = useCallback(() => {
+    const id = selectedIdRef.current;
+    if (!id) return;
+    const s = sessionSnapRef.current;
+    draftCacheRef.current.set(id, {
+      variables: { ...s.variables },
+      output: s.output,
+      marketData: s.marketData,
+      marketStructured: s.marketStructured
+        ? structuredClone(s.marketStructured)
+        : null,
+      error: s.error,
+      logSyncWarning: s.logSyncWarning,
+    });
+  }, []);
+
+  const setActiveCategory = useCallback(
+    (id: string) => {
+      persistCurrentDraft();
+      setActiveCategoryState(id);
+      setSelectedPrompt(null);
+      setVariables({});
+      setOutput("");
+      setMarketData("");
+      setMarketStructured(null);
+      setError("");
+      setLogSyncWarning("");
+      setEditingPrompt(null);
+    },
+    [persistCurrentDraft],
+  );
+
   const activeCategoryObj = useMemo(
     () => categories.find((c) => c.id === activeCategory),
     [categories, activeCategory],
   );
 
-  const selectPrompt = useCallback((p: PromptTemplate) => {
-    setSelectedPrompt(p);
-    setVariables({});
-    setOutput("");
-    setError("");
-    setLogSyncWarning("");
-    setMarketData("");
-    setMarketStructured(null);
-    setEditingPrompt(null);
-  }, []);
+  const selectPrompt = useCallback(
+    (p: PromptTemplate) => {
+      persistCurrentDraft();
+      setSelectedPrompt(p);
+      const cached = draftCacheRef.current.get(p.id);
+      if (cached) {
+        setVariables({ ...cached.variables });
+        skipOutputTypingOnceRef.current = true;
+        setOutput(cached.output);
+        setMarketData(cached.marketData);
+        setMarketStructured(
+          cached.marketStructured ? structuredClone(cached.marketStructured) : null,
+        );
+        setError(cached.error);
+        setLogSyncWarning(cached.logSyncWarning);
+      } else {
+        setVariables({});
+        setOutput("");
+        setMarketData("");
+        setMarketStructured(null);
+        setError("");
+        setLogSyncWarning("");
+      }
+      setEditingPrompt(null);
+    },
+    [persistCurrentDraft],
+  );
 
   /**
    * Replace the log list from /api/app-state only once the new row is visible there.
@@ -509,6 +602,17 @@ export function MeridianProvider({ children }: { children: React.ReactNode }) {
       const saveErr =
         typeof data.logSaveError === "string" ? data.logSaveError.trim() : "";
       if (saveErr) setLogSyncWarning(saveErr);
+
+      draftCacheRef.current.set(selectedPrompt.id, {
+        variables: { ...variables },
+        output: data.output ?? "",
+        marketData: data.marketData ?? "",
+        marketStructured: data.marketDataStructured
+          ? structuredClone(data.marketDataStructured)
+          : null,
+        error: "",
+        logSyncWarning: saveErr,
+      });
 
       const logId =
         typeof data.logId === "string" && data.logId.length > 0
@@ -683,7 +787,7 @@ export function MeridianProvider({ children }: { children: React.ReactNode }) {
     });
     setEditingPrompt(null);
     setEditText("");
-    setSelectedPrompt(fork);
+    selectPrompt(fork);
   }, [
     selectedPrompt,
     editText,
@@ -691,6 +795,7 @@ export function MeridianProvider({ children }: { children: React.ReactNode }) {
     categories,
     persistenceEnabled,
     setError,
+    selectPrompt,
   ]);
 
   const rateLog = useCallback(
@@ -918,6 +1023,7 @@ export function MeridianProvider({ children }: { children: React.ReactNode }) {
       view,
       setView,
       activeCategory,
+      setActiveCategory,
       selectedPrompt,
       variables,
       output,
