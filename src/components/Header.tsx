@@ -9,9 +9,14 @@ export function Header() {
   return (
     <header className="flex shrink-0 flex-col gap-3 border-b-[0.5px] border-fp-border bg-fp-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-[30px] w-[30px] items-center justify-center rounded-fp-btn bg-fp-research font-mono text-[15px] font-bold text-white">
-          M
-        </div>
+        <img
+          src="/logo.svg"
+          width={30}
+          height={30}
+          alt=""
+          className="h-[30px] w-[30px] shrink-0"
+          decoding="async"
+        />
         <div>
           <div className="text-[15px] font-bold text-fp-text-primary">
             Meridian
