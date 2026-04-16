@@ -188,6 +188,8 @@ function isMissingEnrichPeerTickersColumnError(err: {
   return m.includes("enrich_peer_tickers");
 }
 
+//figuring out bugs
+
 const PROMPT_SELECT_WITH_PEER =
   "id,category_id,title,description,template,variables,enrich_ticker,enrich_peer_tickers,sort_order,instruction_footer";
 
