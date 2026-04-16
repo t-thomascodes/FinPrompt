@@ -440,6 +440,7 @@ export async function loadLogsListForAppState(
       "— check Supabase Project Settings → API → Max rows (suggest ≥1000), or increase range below.",
     );
   }
+  console.log("[Meridian] app-state logs:", { rows: rows.length, count, usedListExcerpts });
   return rows.map((row) =>
     rowToWorkflowLogList(
       usedListExcerpts
