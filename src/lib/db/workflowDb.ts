@@ -408,36 +408,64 @@ function isMissingPromptTemplateSnapshotError(err: { message?: string; code?: st
 export async function loadLogsListForAppState(
   supabase: SupabaseClient,
 ): Promise<WorkflowLog[]> {
-  const runSelect = (cols: string) =>
+  const PAGE_SIZE = 25;
+  const MAX_PAGES = 12; // 300 rows max total, matches previous .limit(300)
+
+  const runSelect = (cols: string, from: number, to: number) =>
     supabase
       .from("workflow_logs")
       .select(cols, { count: "exact" })
       .order("created_at", { ascending: false })
-      .limit(300);
+      .range(from, to);
 
-  let { data, error, count } = await runSelect(APP_STATE_LOG_COLUMNS_FULL);
-  let usedListExcerpts = false;
-  if (error && isMissingFingerprintColumnsError(error)) {
-    if (usedListExcerpts) {
-      ({ data, error, count } = await runSelect(APP_STATE_LOG_SLIM));
-    } else {
-      ({ data, error, count } = await runSelect(APP_STATE_LOG_COLUMNS_BASE));
+  /** Run one page with the same fallback chain the original single-query path used. */
+  async function fetchPage(
+    from: number,
+    to: number,
+  ): Promise<{ rows: unknown[]; count: number | null; usedListExcerpts: boolean }> {
+    let { data, error, count } = await runSelect(APP_STATE_LOG_SLIM_VARIANT, from, to);
+    let usedListExcerpts = true;
+    if (error && isMissingListExcerptColumnsError(error)) {
+      usedListExcerpts = false;
+      ({ data, error, count } = await runSelect(APP_STATE_LOG_COLUMNS_FULL, from, to));
     }
+    if (error && isMissingFingerprintColumnsError(error)) {
+      if (usedListExcerpts) {
+        ({ data, error, count } = await runSelect(APP_STATE_LOG_SLIM, from, to));
+      } else {
+        ({ data, error, count } = await runSelect(APP_STATE_LOG_COLUMNS_BASE, from, to));
+      }
+    }
+    if (error) throw error;
+    return { rows: data ?? [], count: count ?? null, usedListExcerpts };
   }
-  if (error) throw error;
-  const rows = data ?? [];
-  if (typeof count === "number" && count > rows.length && rows.length <= 50) {
-    console.warn(
-      "[Meridian] workflow_logs list may be truncated:",
-      "returned",
-      rows.length,
-      "rows but table count is",
-      count,
-      "— check Supabase Project Settings → API → Max rows (suggest ≥1000), or increase range below.",
-    );
+
+  const allRows: unknown[] = [];
+  let totalCount: number | null = null;
+  let usedListExcerpts = true;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    const { rows, count, usedListExcerpts: ule } = await fetchPage(from, to);
+    if (page === 0) {
+      totalCount = count;
+      usedListExcerpts = ule;
+    }
+    allRows.push(...rows);
+    // stop early if this page was not full — we've reached the end of the table
+    if (rows.length < PAGE_SIZE) break;
+    // or stop if we've collected everything the count says exists
+    if (typeof totalCount === "number" && allRows.length >= totalCount) break;
   }
-  console.log("[Meridian] app-state logs:", { rows: rows.length, count, usedListExcerpts });
-  return rows.map((row) =>
+
+  console.log("[Meridian] app-state logs:", {
+    rows: allRows.length,
+    count: totalCount,
+    usedListExcerpts,
+  });
+
+  return allRows.map((row) =>
     rowToWorkflowLogList(
       usedListExcerpts
         ? normalizeAppStateLogRow(row)
