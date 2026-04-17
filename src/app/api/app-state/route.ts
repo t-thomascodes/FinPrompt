@@ -22,11 +22,6 @@ const NO_STORE_HEADERS = {
 
 export async function GET() {
   const supabase = getSupabaseAdmin();
-  console.log("[Meridian] env url:", process.env.NEXT_PUBLIC_SUPABASE_URL);
-  console.log(
-    "[Meridian] env key tail:",
-    process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(-10) ?? "MISSING",
-  );
   if (!supabase) {
     return NextResponse.json(
       {
