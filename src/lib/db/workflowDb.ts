@@ -415,12 +415,8 @@ export async function loadLogsListForAppState(
       .order("created_at", { ascending: false })
       .limit(300);
 
-  let { data, error, count } = await runSelect(APP_STATE_LOG_SLIM_VARIANT);
-  let usedListExcerpts = true;
-  if (error && isMissingListExcerptColumnsError(error)) {
-    usedListExcerpts = false;
-    ({ data, error, count } = await runSelect(APP_STATE_LOG_COLUMNS_FULL));
-  }
+  let { data, error, count } = await runSelect(APP_STATE_LOG_COLUMNS_FULL);
+  let usedListExcerpts = false;
   if (error && isMissingFingerprintColumnsError(error)) {
     if (usedListExcerpts) {
       ({ data, error, count } = await runSelect(APP_STATE_LOG_SLIM));
